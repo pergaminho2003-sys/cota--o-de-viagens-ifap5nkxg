@@ -132,6 +132,12 @@ export const configAgenciaService = {
           logo_url: r.logo_url || '',
           logo_base64: r.logo_base64 || '',
           margem_padrao: Number(r.margem_padrao) || 15,
+          imposto_lucro_padrao:
+            r.imposto_lucro_padrao !== undefined &&
+            r.imposto_lucro_padrao !== null &&
+            r.imposto_lucro_padrao !== ''
+              ? Number(r.imposto_lucro_padrao)
+              : 6,
           validade_padrao_dias: Number(r.validade_padrao_dias) || 7,
           condicoes_padrao: r.condicoes_padrao || '',
           formas_pagamento_padrao: r.formas_pagamento_padrao || '',
@@ -154,6 +160,7 @@ export const configAgenciaService = {
       endereco: 'Av. Paulista, 1000, Cj. 142 - Bela Vista, São Paulo - SP',
       site_instagram: '@auraviagens | www.auraviagens.com.br',
       margem_padrao: 15,
+      imposto_lucro_padrao: 6,
       validade_padrao_dias: 7,
       condicoes_padrao:
         '• Valores sujeitos a alteração e disponibilidade sem aviso prévio até a confirmação da reserva.\n• Tarifas aéreas e de hospedagem não reembolsáveis conforme regras de cada fornecedor.\n• Documentação pessoal, passaportes com validade mínima de 6 meses e vistos são de responsabilidade do passageiro.',

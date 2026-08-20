@@ -46,6 +46,9 @@ export interface TotaisCalculados {
   valorCustoTotal: number
   valorMargemLucro: number
   valorSubtotalComMargem: number
+  aliquotaImpostoLucro: number
+  valorImpostoLucro: number
+  valorLucroLiquido: number
   valorTaxas: number
   valorDesconto: number
   valorFinalVenda: number
@@ -58,6 +61,7 @@ export function calcularTotaisCotacao(params: {
   desconto: number
   taxasAdicionais: number
   numPassageiros: number
+  impostoLucroPercent?: number
 }): TotaisCalculados {
   const valorCustoTotal = params.servicos.reduce((acc, item) => {
     const custo =
@@ -70,6 +74,11 @@ export function calcularTotaisCotacao(params: {
   const valorMargemLucro = (valorCustoTotal * margem) / 100
   const valorSubtotalComMargem = valorCustoTotal + valorMargemLucro
 
+  const aliquotaImpostoLucro =
+    params.impostoLucroPercent !== undefined ? Number(params.impostoLucroPercent) : 6
+  const valorImpostoLucro = (valorMargemLucro * (aliquotaImpostoLucro || 0)) / 100
+  const valorLucroLiquido = valorMargemLucro - valorImpostoLucro
+
   const taxas = Number(params.taxasAdicionais) || 0
   const desconto = Number(params.desconto) || 0
 
@@ -81,6 +90,9 @@ export function calcularTotaisCotacao(params: {
     valorCustoTotal,
     valorMargemLucro,
     valorSubtotalComMargem,
+    aliquotaImpostoLucro,
+    valorImpostoLucro,
+    valorLucroLiquido,
     valorTaxas: taxas,
     valorDesconto: desconto,
     valorFinalVenda,

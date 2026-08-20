@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T03:47:13.809Z",
+  "generatedAt": "2026-08-20T04:01:32.038Z",
   "collections": [
     {
       "name": "users",
@@ -337,6 +337,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "imposto_lucro_padrao",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": []

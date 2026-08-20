@@ -110,6 +110,9 @@ export function FormCotacao({
   )
   const [dataValidade, setDataValidade] = useState(cotacaoInicial?.data_validade || '')
 
+  const impostoAliquota =
+    configAgencia.imposto_lucro_padrao !== undefined ? configAgencia.imposto_lucro_padrao : 6
+
   // Calculation engine
   const totais = useMemo(() => {
     return calcularTotaisCotacao({
@@ -118,8 +121,9 @@ export function FormCotacao({
       desconto,
       taxasAdicionais,
       numPassageiros,
+      impostoLucroPercent: impostoAliquota,
     })
-  }, [servicos, margemLucro, desconto, taxasAdicionais, numPassageiros])
+  }, [servicos, margemLucro, desconto, taxasAdicionais, numPassageiros, impostoAliquota])
 
   // Set default validity date if not set
   useEffect(() => {
@@ -880,8 +884,8 @@ export function FormCotacao({
               </div>
 
               <CardContent className="p-5 space-y-5 text-slate-200">
-                {/* Margem de Lucro Input Slider/Number */}
-                <div className="space-y-2 bg-slate-800/60 p-3 rounded-lg border border-slate-700/80">
+                {/* Margem de Lucro Input & Quick Options */}
+                <div className="space-y-2.5 bg-slate-800/60 p-3.5 rounded-lg border border-slate-700/80">
                   <div className="flex items-center justify-between">
                     <Label
                       htmlFor="margemLucro"
@@ -891,6 +895,7 @@ export function FormCotacao({
                     </Label>
                     <span className="text-sm font-black text-sky-400">{margemLucro}%</span>
                   </div>
+
                   <div className="flex items-center gap-2">
                     <Input
                       id="margemLucro"
@@ -901,34 +906,31 @@ export function FormCotacao({
                       onChange={(e) => setMargemLucro(parseFloat(e.target.value) || 0)}
                       className="bg-slate-900 border-slate-700 text-white text-sm font-bold h-9"
                     />
-                    <div className="flex gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setMargemLucro(10)}
-                        className={`h-9 px-2 text-xs ${margemLucro === 10 ? 'bg-sky-600 text-white border-sky-500' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
-                      >
-                        10%
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setMargemLucro(15)}
-                        className={`h-9 px-2 text-xs ${margemLucro === 15 ? 'bg-sky-600 text-white border-sky-500' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
-                      >
-                        15%
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setMargemLucro(20)}
-                        className={`h-9 px-2 text-xs ${margemLucro === 20 ? 'bg-sky-600 text-white border-sky-500' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
-                      >
-                        20%
-                      </Button>
+                    <span className="text-xs font-bold text-slate-400 px-1">%</span>
+                  </div>
+
+                  {/* Opções rápidas de margem: 25%, 30%, 35%, 40%, 45%, 50% */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
+                      <span>Opções rápidas de margem:</span>
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                      {[25, 30, 35, 40, 45, 50].map((opcao) => (
+                        <Button
+                          key={opcao}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setMargemLucro(opcao)}
+                          className={`h-8 px-1 text-xs font-bold transition-all ${
+                            margemLucro === opcao
+                              ? 'bg-sky-600 text-white border-sky-400 shadow-sm shadow-sky-600/50 hover:bg-sky-500'
+                              : 'bg-slate-850 bg-slate-900/90 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+                          }`}
+                        >
+                          {opcao}%
+                        </Button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -971,47 +973,77 @@ export function FormCotacao({
 
                 {/* Resumo Financeiro Breakdown */}
                 <div className="pt-3 border-t border-slate-800 space-y-2 text-xs">
-                  <div className="flex justify-between text-slate-400">
-                    <span>Custo Total dos Serviços (Fornecedores):</span>
-                    <span className="font-semibold text-slate-200">
+                  {/* 1. Subtotal (Custo dos Serviços) */}
+                  <div className="flex justify-between text-slate-300">
+                    <span>Subtotal (Custo dos Serviços):</span>
+                    <span className="font-semibold text-slate-100">
                       {formatarMoeda(totais.valorCustoTotal, moeda)}
                     </span>
                   </div>
 
+                  {/* 2. Margem (%) */}
+                  <div className="flex justify-between text-slate-400 text-[11px]">
+                    <span>Margem Aplicada:</span>
+                    <span className="font-medium text-sky-400">{margemLucro}%</span>
+                  </div>
+
+                  {/* 3. Lucro Bruto (= subtotal * margem%) */}
                   <div className="flex justify-between text-emerald-400 font-medium">
-                    <span>Lucro Bruto Previsto ({margemLucro}%):</span>
+                    <span>Lucro Bruto ({margemLucro}%):</span>
                     <span className="font-bold">
                       + {formatarMoeda(totais.valorMargemLucro, moeda)}
                     </span>
                   </div>
 
+                  {/* 4. Imposto (Y% sobre o lucro) */}
+                  <div className="flex justify-between text-rose-300/90 text-xs">
+                    <span className="flex items-center gap-1">
+                      Imposto ({totais.aliquotaImpostoLucro}% sobre o lucro):
+                    </span>
+                    <span className="font-semibold">
+                      - {formatarMoeda(totais.valorImpostoLucro, moeda)}
+                    </span>
+                  </div>
+
+                  {/* 5. Lucro Líquido (= lucro bruto - imposto) */}
+                  <div className="flex justify-between text-emerald-300 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1.5 rounded-md font-semibold">
+                    <span className="text-emerald-300 flex items-center gap-1 font-bold">
+                      Lucro Líquido Real:
+                    </span>
+                    <span className="font-extrabold text-emerald-200">
+                      {formatarMoeda(totais.valorLucroLiquido, moeda)}
+                    </span>
+                  </div>
+
+                  {/* 6. Taxas Adicionais */}
                   {taxasAdicionais > 0 && (
-                    <div className="flex justify-between text-slate-400">
+                    <div className="flex justify-between text-slate-300 pt-1">
                       <span>Taxas Adicionais:</span>
-                      <span className="text-slate-200">
+                      <span className="text-slate-100 font-medium">
                         + {formatarMoeda(taxasAdicionais, moeda)}
                       </span>
                     </div>
                   )}
 
+                  {/* 7. Descontos */}
                   {desconto > 0 && (
-                    <div className="flex justify-between text-amber-400">
-                      <span>Desconto Aplicado:</span>
-                      <span>- {formatarMoeda(desconto, moeda)}</span>
+                    <div className="flex justify-between text-amber-400 pt-1">
+                      <span>Descontos:</span>
+                      <span className="font-medium">- {formatarMoeda(desconto, moeda)}</span>
                     </div>
                   )}
 
-                  {/* Valor Final da Venda */}
+                  {/* 8. Total Final & 9. Valor por passageiro adulto */}
                   <div className="pt-3 mt-3 border-t-2 border-sky-500/50 bg-sky-950/40 p-3 rounded-lg flex flex-col gap-1">
                     <div className="flex items-center justify-between">
                       <span className="text-xs uppercase font-extrabold tracking-wider text-sky-300">
-                        Preço Final de Venda
+                        Total Final de Venda
                       </span>
                       <span className="text-xl font-black text-white">
                         {formatarMoeda(totais.valorFinalVenda, moeda)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-[11px] text-slate-400 pt-1">
+                    <div className="flex justify-between text-[11px] text-slate-400 pt-1 border-t border-sky-900/60 mt-1">
                       <span>Valor por passageiro adulto ({numPassageiros}x):</span>
                       <span className="font-bold text-sky-300">
                         {formatarMoeda(totais.valorPorPessoa, moeda)}

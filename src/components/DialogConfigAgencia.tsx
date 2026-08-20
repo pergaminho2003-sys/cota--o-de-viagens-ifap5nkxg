@@ -36,6 +36,7 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
     logo_url: '',
     logo_base64: '',
     margem_padrao: 15,
+    imposto_lucro_padrao: 6,
     validade_padrao_dias: 7,
     condicoes_padrao: '',
     formas_pagamento_padrao: '',
@@ -242,7 +243,7 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
                 <span>Padrões Automáticos para Novas Cotações</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="margem_padrao">Margem de Lucro Padrão (%)</Label>
                   <div className="relative">
@@ -251,7 +252,7 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
                       type="number"
                       min="0"
                       step="0.5"
-                      value={config.margem_padrao || 0}
+                      value={config.margem_padrao ?? 15}
                       onChange={(e) =>
                         setConfig({ ...config, margem_padrao: parseFloat(e.target.value) || 0 })
                       }
@@ -263,7 +264,30 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="validade_padrao_dias">Validade Padrão da Cotação (Dias)</Label>
+                  <Label htmlFor="imposto_lucro_padrao">Imposto s/ Lucro (%)</Label>
+                  <div className="relative">
+                    <Input
+                      id="imposto_lucro_padrao"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={config.imposto_lucro_padrao ?? 6}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          imposto_lucro_padrao:
+                            parseFloat(e.target.value) >= 0 ? parseFloat(e.target.value) : 0,
+                        })
+                      }
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">
+                      %
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="validade_padrao_dias">Validade Padrão (Dias)</Label>
                   <Input
                     id="validade_padrao_dias"
                     type="number"

@@ -67,6 +67,7 @@ export default function Index() {
     cnpj_cadastur: 'CADASTUR: 26.045.892/0001-30',
     email_contato: 'atendimento@auraviagens.com.br',
     margem_padrao: 15,
+    imposto_lucro_padrao: 6,
     validade_padrao_dias: 7,
   })
 
