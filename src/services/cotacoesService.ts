@@ -172,26 +172,128 @@ export const configAgenciaService = {
   },
 
   async salvar(dados: ConfiguracoesAgencia): Promise<ConfiguracoesAgencia> {
-    try {
-      const { id, created, updated, ...payload } = dados
+    // Sanitização e formatação estrita do payload de acordo com o schema da collection
+    const sanitizarPayload = (item: Partial<ConfiguracoesAgencia>) => {
+      const payload: Record<string, string | number> = {
+        nome_agencia: (item.nome_agencia || 'Sua Agência de Viagens').trim(),
+        cnpj_cadastur: item.cnpj_cadastur ? String(item.cnpj_cadastur).trim() : '',
+        email_contato: item.email_contato ? String(item.email_contato).trim() : '',
+        telefone_contato: item.telefone_contato ? String(item.telefone_contato).trim() : '',
+        whatsapp: item.whatsapp ? String(item.whatsapp).trim() : '',
+        endereco: item.endereco ? String(item.endereco).trim() : '',
+        site_instagram: item.site_instagram ? String(item.site_instagram).trim() : '',
+        logo_url: item.logo_url ? String(item.logo_url).trim() : '',
+        logo_base64: item.logo_base64 ? String(item.logo_base64) : '',
+        margem_padrao: Math.max(0, Number(item.margem_padrao) || 0),
+        validade_padrao_dias: Math.max(1, Math.round(Number(item.validade_padrao_dias) || 7)),
+        condicoes_padrao: item.condicoes_padrao ? String(item.condicoes_padrao).trim() : '',
+        formas_pagamento_padrao: item.formas_pagamento_padrao
+          ? String(item.formas_pagamento_padrao).trim()
+          : '',
+        mensagem_agradecimento: item.mensagem_agradecimento
+          ? String(item.mensagem_agradecimento).trim()
+          : '',
+        imposto_lucro_padrao: Math.max(0, Number(item.imposto_lucro_padrao) || 0),
+      }
+      return payload
+    }
 
-      if (id) {
-        const rec = await pb.collection('configuracoes_agencia').update(id, payload)
-        return { ...dados, ...rec }
+    const payload = sanitizarPayload(dados)
+    let targetId = dados.id
+
+    // Log preliminar
+    console.log('[configAgenciaService.salvar] Enviando payload sanitizado:', {
+      targetId,
+      payload,
+    })
+
+    const tentarSalvarOuAtualizar = async (recordId?: string) => {
+      if (recordId) {
+        return await pb.collection('configuracoes_agencia').update(recordId, payload)
       } else {
-        const records = await pb.collection('configuracoes_agencia').getList(1, 1)
-        if (records.items.length > 0) {
-          const first = records.items[0]
-          const rec = await pb.collection('configuracoes_agencia').update(first.id, payload)
-          return { ...dados, id: first.id, ...rec }
+        const list = await pb
+          .collection('configuracoes_agencia')
+          .getList(1, 1, { sort: '-created' })
+        if (list.items.length > 0) {
+          return await pb.collection('configuracoes_agencia').update(list.items[0].id, payload)
         } else {
-          const rec = await pb.collection('configuracoes_agencia').create(payload)
-          return { ...dados, id: rec.id, ...rec }
+          return await pb.collection('configuracoes_agencia').create(payload)
         }
       }
-    } catch (err) {
-      console.error('Erro ao salvar configurações da agência:', err)
-      throw err
+    }
+
+    try {
+      const rec = await tentarSalvarOuAtualizar(targetId)
+      return {
+        ...dados,
+        ...rec,
+        id: rec.id,
+        created: rec.created,
+        updated: rec.updated,
+      } as ConfiguracoesAgencia
+    } catch (err: unknown) {
+      const pbErr = err as {
+        status?: number
+        message?: string
+        data?: Record<string, unknown>
+        response?: Record<string, unknown>
+      }
+
+      console.error('[configAgenciaService.salvar] Erro detalhado do PocketBase:', {
+        status: pbErr?.status,
+        message: pbErr?.message,
+        data: pbErr?.data,
+        response: pbErr?.response,
+        fullError: err,
+      })
+
+      // Fallback: se falhar com erro 400 ao tentar atualizar com id específico,
+      // busca o registro mais recente do servidor, faz merge dos dados e tenta novamente
+      try {
+        console.warn(
+          '[configAgenciaService.salvar] Tentando fallback de sincronização com o servidor...',
+        )
+        const records = await pb
+          .collection('configuracoes_agencia')
+          .getList(1, 1, { sort: '-created' })
+        if (records.items.length > 0) {
+          const first = records.items[0]
+          console.log('[configAgenciaService.salvar] Fallback encontrou registro:', first.id)
+          const rec = await pb.collection('configuracoes_agencia').update(first.id, payload)
+          return {
+            ...dados,
+            ...rec,
+            id: rec.id,
+            created: rec.created,
+            updated: rec.updated,
+          } as ConfiguracoesAgencia
+        } else {
+          console.log('[configAgenciaService.salvar] Fallback criando novo registro')
+          const rec = await pb.collection('configuracoes_agencia').create(payload)
+          return {
+            ...dados,
+            ...rec,
+            id: rec.id,
+            created: rec.created,
+            updated: rec.updated,
+          } as ConfiguracoesAgencia
+        }
+      } catch (fallbackErr: unknown) {
+        const fbErr = fallbackErr as {
+          status?: number
+          message?: string
+          data?: Record<string, unknown>
+          response?: Record<string, unknown>
+        }
+        console.error('[configAgenciaService.salvar] Erro no fallback detalhado:', {
+          status: fbErr?.status,
+          message: fbErr?.message,
+          data: fbErr?.data,
+          response: fbErr?.response,
+          fullError: fallbackErr,
+        })
+        throw fallbackErr
+      }
     }
   },
 }

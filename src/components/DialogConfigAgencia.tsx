@@ -70,9 +70,18 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
       toast.success('Configurações da agência salvas com sucesso!')
       onSaved?.(atualizado)
       onOpenChange(false)
-    } catch (err) {
-      console.error(err)
-      toast.error('Erro ao salvar configurações')
+    } catch (err: unknown) {
+      console.error('Erro ao salvar configurações:', err)
+      const errorObj = err as { data?: Record<string, { message?: string }>; message?: string }
+      let detalhe = ''
+      if (errorObj?.data) {
+        detalhe = Object.entries(errorObj.data)
+          .map(([k, v]) => `${k}: ${v?.message || JSON.stringify(v)}`)
+          .join(', ')
+      }
+      toast.error(
+        detalhe ? `Erro ao salvar: ${detalhe}` : 'Erro ao salvar configurações da agência',
+      )
     } finally {
       setSalvando(false)
     }
