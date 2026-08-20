@@ -173,17 +173,19 @@ export const configAgenciaService = {
 
   async salvar(dados: ConfiguracoesAgencia): Promise<ConfiguracoesAgencia> {
     try {
-      if (dados.id) {
-        const rec = await pb.collection('configuracoes_agencia').update(dados.id, dados)
+      const { id, created, updated, ...payload } = dados
+
+      if (id) {
+        const rec = await pb.collection('configuracoes_agencia').update(id, payload)
         return { ...dados, ...rec }
       } else {
         const records = await pb.collection('configuracoes_agencia').getList(1, 1)
         if (records.items.length > 0) {
           const first = records.items[0]
-          const rec = await pb.collection('configuracoes_agencia').update(first.id, dados)
+          const rec = await pb.collection('configuracoes_agencia').update(first.id, payload)
           return { ...dados, id: first.id, ...rec }
         } else {
-          const rec = await pb.collection('configuracoes_agencia').create(dados)
+          const rec = await pb.collection('configuracoes_agencia').create(payload)
           return { ...dados, id: rec.id, ...rec }
         }
       }
