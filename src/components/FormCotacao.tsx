@@ -999,7 +999,7 @@ export function FormCotacao({
                         Margem Desejada
                       </div>
                       <p className="text-[10px] opacity-80 mt-1 leading-tight">
-                        Custo × (1 + margem %)
+                        Custo ÷ (1 − margem %)
                       </p>
                     </button>
 
@@ -1280,14 +1280,17 @@ export function FormCotacao({
                           </span>
                         </div>
                         <div className="flex justify-between items-center text-emerald-400 text-[11px]">
-                          <span>Margem Desejada:</span>
-                          <span className="font-bold">{cenarioA.margemRealPercent}%</span>
+                          <span>Margem Bruta Desejada:</span>
+                          <span className="font-bold">
+                            {cenarioA.margemBrutaPercent.toFixed(1)}% (
+                            {formatarMoeda(cenarioA.lucroBruto, moeda)})
+                          </span>
                         </div>
                         <div className="flex justify-between items-center text-emerald-300 text-[11px]">
-                          <span>Lucro Líq. ({impostoAliquota}% imp):</span>
+                          <span>Margem Líquida Real (pós-imposto):</span>
                           <span className="font-semibold">
-                            {formatarMoeda(cenarioA.lucroLiquido, moeda)} (
-                            {cenarioA.margemLiquidaPercent.toFixed(1)}%)
+                            {cenarioA.margemLiquidaPercent.toFixed(1)}% (
+                            {formatarMoeda(cenarioA.lucroLiquido, moeda)})
                           </span>
                         </div>
                         {cenarioA.temEconomia && (
@@ -1389,7 +1392,8 @@ export function FormCotacao({
                   <div className="flex justify-between text-emerald-400 font-medium">
                     <span>Lucro Bruto Estimado:</span>
                     <span className="font-bold">
-                      + {formatarMoeda(totais.valorMargemLucro, moeda)}
+                      + {formatarMoeda(totais.valorMargemLucro, moeda)} (
+                      {totais.margemBrutaEfetivaPercent.toFixed(1)}%)
                     </span>
                   </div>
 

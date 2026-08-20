@@ -51,6 +51,7 @@ export interface TotaisCalculados {
   margemDesejadaPercent: number
   precoVendaModoA: number
   lucroBrutoModoA: number
+  margemBrutaModoAPercent: number
   aliquotaImpostoLucro: number
   impostoModoA: number
   lucroLiquidoModoA: number
@@ -62,17 +63,20 @@ export interface TotaisCalculados {
   descontoMercadoPercent: number
   precoVendaModoB: number
   lucroBrutoModoB: number
+  margemBrutaModoBPercent: number
   impostoModoB: number
   lucroLiquidoModoB: number
   margemRealResultanteModoBPercent: number
+  margemLiquidaModoBPercent: number
   economiaModoBReais: number
   economiaModoBPercent: number
   // Valores Efetivos baseados no modo selecionado + taxas e desconto avulso
-  valorMargemLucro: number
+  valorMargemLucro: number // Lucro bruto em R$
+  margemBrutaEfetivaPercent: number // Margem bruta em %
   valorSubtotalComMargem: number
   valorImpostoLucro: number
-  valorLucroLiquido: number
-  margemLiquidaEfetivaPercent: number
+  valorLucroLiquido: number // Lucro líquido em R$
+  margemLiquidaEfetivaPercent: number // Margem líquida em %
   valorTaxas: number
   valorDesconto: number
   valorFinalVenda: number
@@ -84,7 +88,8 @@ export interface TotaisCalculados {
 
 export interface CenarioPrecificacaoModoA {
   precoFinal: number
-  margemRealPercent: number
+  margemBrutaPercent: number
+  margemRealPercent: number // mantido para compatibilidade
   lucroBruto: number
   imposto: number
   lucroLiquido: number
@@ -99,6 +104,7 @@ export interface CenarioPrecificacaoModoB {
   descontoAplicadoPercent: number
   precoMercado: number
   lucroBruto: number
+  margemBrutaPercent: number
   imposto: number
   lucroLiquido: number
   margemRealResultantePercent: number
@@ -124,13 +130,22 @@ export function calcularCenarioModoA(params: {
       ? Number(params.precoMercado)
       : undefined
 
-  // Modo A: Preço final = Custo × (1 + margem % desejada)
-  const precoFinal = custo * (1 + margem / 100)
+  // Modo A: Preço final = Custo ÷ (1 − margem % desejada)
+  // Se margem >= 100%, limitamos o denominador para evitar divisão por zero ou negativa
+  const fatorDivisor = margem >= 100 ? 0.0001 : 1 - margem / 100
+  const precoFinal = custo > 0 ? (fatorDivisor > 0 ? custo / fatorDivisor : 0) : 0
+
+  // Margem Bruta (antes do imposto): Preço final − Custo em R$, e (Preço final − Custo) ÷ Preço final em %
   const lucroBruto = Math.max(0, precoFinal - custo)
+  const margemBrutaPercent = precoFinal > 0 ? (lucroBruto / precoFinal) * 100 : margem
+
+  // Imposto: Margem Bruta em R$ × imposto %
   const imposto = lucroBruto * aliquotaImposto
-  const lucroLiquido = lucroBruto - imposto
-  const margemRealPercent = margem
+
+  // Margem Líquida (pós-imposto): Margem Bruta em R$ − Imposto em R$, e Margem Líquida em R$ ÷ Preço final em %
+  const lucroLiquido = Math.max(0, lucroBruto - imposto)
   const margemLiquidaPercent = precoFinal > 0 ? (lucroLiquido / precoFinal) * 100 : 0
+  const margemRealPercent = margemBrutaPercent
 
   let economiaClienteReais = 0
   let economiaClientePercent = 0
@@ -144,6 +159,7 @@ export function calcularCenarioModoA(params: {
 
   return {
     precoFinal,
+    margemBrutaPercent,
     margemRealPercent,
     lucroBruto,
     imposto,
@@ -176,15 +192,16 @@ export function calcularCenarioModoB(params: {
   // Modo B: Preço final = Preço de mercado × (1 − desconto % que vou dar)
   const precoFinal = valido ? Math.max(0, precoMercado * (1 - desconto / 100)) : 0
 
-  // Lucro bruto = Preço final - Custo
+  // Margem bruta = Preço final - Custo
   const lucroBruto = Math.max(0, precoFinal - custo)
-  // Imposto = (Preço final − Custo total) × aliquota_imposto
-  const imposto = precoFinal - custo > 0 ? (precoFinal - custo) * aliquotaImposto : 0
-  const lucroLiquido = precoFinal - custo - imposto
+  const margemBrutaPercent = precoFinal > 0 ? (lucroBruto / precoFinal) * 100 : 0
+
+  // Imposto = Margem Bruta em R$ × aliquota_imposto
+  const imposto = lucroBruto * aliquotaImposto
+  const lucroLiquido = Math.max(0, lucroBruto - imposto)
 
   // Margem real resultante = (Preço final − Custo − Imposto) ÷ Preço final
-  const margemRealResultantePercent =
-    precoFinal > 0 ? ((precoFinal - custo - imposto) / precoFinal) * 100 : 0
+  const margemRealResultantePercent = precoFinal > 0 ? (lucroLiquido / precoFinal) * 100 : 0
 
   const margemLiquidaPercent = margemRealResultantePercent
 
@@ -198,6 +215,7 @@ export function calcularCenarioModoB(params: {
     descontoAplicadoPercent: desconto,
     precoMercado,
     lucroBruto,
+    margemBrutaPercent,
     imposto,
     lucroLiquido,
     margemRealResultantePercent,
@@ -258,6 +276,7 @@ export function calcularTotaisCotacao(params: {
   // Determinar valores conforme modo selecionado
   let precoBaseModo = 0
   let valorMargemLucro = 0
+  let margemBrutaEfetivaPercent = 0
   let valorImpostoLucro = 0
   let valorLucroLiquido = 0
   let margemLiquidaEfetivaPercent = 0
@@ -268,6 +287,7 @@ export function calcularTotaisCotacao(params: {
   if (modoPrecificacao === 'desconto_mercado' && cenarioB.valido) {
     precoBaseModo = cenarioB.precoFinal
     valorMargemLucro = cenarioB.lucroBruto
+    margemBrutaEfetivaPercent = cenarioB.margemBrutaPercent
     valorImpostoLucro = cenarioB.imposto
     valorLucroLiquido = cenarioB.lucroLiquido
     margemLiquidaEfetivaPercent = cenarioB.margemRealResultantePercent
@@ -278,6 +298,7 @@ export function calcularTotaisCotacao(params: {
     // Modo Margem (padrão)
     precoBaseModo = cenarioA.precoFinal
     valorMargemLucro = cenarioA.lucroBruto
+    margemBrutaEfetivaPercent = cenarioA.margemBrutaPercent
     valorImpostoLucro = cenarioA.imposto
     valorLucroLiquido = cenarioA.lucroLiquido
     margemLiquidaEfetivaPercent = cenarioA.margemLiquidaPercent
@@ -301,6 +322,7 @@ export function calcularTotaisCotacao(params: {
     margemDesejadaPercent,
     precoVendaModoA: cenarioA.precoFinal,
     lucroBrutoModoA: cenarioA.lucroBruto,
+    margemBrutaModoAPercent: cenarioA.margemBrutaPercent,
     aliquotaImpostoLucro,
     impostoModoA: cenarioA.imposto,
     lucroLiquidoModoA: cenarioA.lucroLiquido,
@@ -312,13 +334,16 @@ export function calcularTotaisCotacao(params: {
     descontoMercadoPercent,
     precoVendaModoB: cenarioB.precoFinal,
     lucroBrutoModoB: cenarioB.lucroBruto,
+    margemBrutaModoBPercent: cenarioB.margemBrutaPercent,
     impostoModoB: cenarioB.imposto,
     lucroLiquidoModoB: cenarioB.lucroLiquido,
     margemRealResultanteModoBPercent: cenarioB.margemRealResultantePercent,
+    margemLiquidaModoBPercent: cenarioB.margemLiquidaPercent,
     economiaModoBReais: cenarioB.economiaClienteReais,
     economiaModoBPercent: cenarioB.economiaClientePercent,
     // Efetivos
     valorMargemLucro,
+    margemBrutaEfetivaPercent,
     valorSubtotalComMargem,
     valorImpostoLucro,
     valorLucroLiquido,
