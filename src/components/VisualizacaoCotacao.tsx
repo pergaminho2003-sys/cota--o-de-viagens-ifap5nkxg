@@ -64,7 +64,6 @@ ${cotacao.servicos.map((s) => `• ${s.nome}${s.descricao ? ` (${s.descricao})` 
 👤 *Por adulto:* ${formatarMoeda(valorPorPessoa, cotacao.moeda)}
 
 ${cotacao.formas_pagamento ? `💳 *Condições de Pagamento:*\n${cotacao.formas_pagamento}\n` : ''}
-${cotacao.data_validade ? `⏳ *Proposta válida até:* ${formatarData(cotacao.data_validade)}\n` : ''}
 Qualquer dúvida estamos à disposição!`
 
     navigator.clipboard.writeText(texto)
@@ -251,11 +250,6 @@ Qualquer dúvida estamos à disposição!`
                 <strong className="text-slate-700">Canais:</strong> {configAgencia.site_instagram}
               </div>
             )}
-            {cotacao.data_validade && (
-              <div className="text-xs text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded-md p-1 px-2 mt-1">
-                ⏳ Proposta válida até: {formatarData(cotacao.data_validade)}
-              </div>
-            )}
           </div>
         </div>
 
@@ -276,8 +270,8 @@ Qualquer dúvida estamos à disposição!`
               <thead>
                 <tr className="bg-slate-900 text-white text-xs uppercase tracking-wider">
                   <th className="py-3 px-4 font-bold">Serviço / Detalhes</th>
-                  <th className="py-3 px-4 text-center font-bold w-20">Qtd</th>
-                  <th className="py-3 px-4 text-right font-bold w-36">Valor Estimado</th>
+                  <th className="py-3 px-4 text-center font-bold w-24">Qtd</th>
+                  <th className="py-3 px-4 text-right font-bold w-32">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
@@ -307,8 +301,10 @@ Qualquer dúvida estamos à disposição!`
                       <td className="py-3.5 px-4 text-center font-semibold text-slate-700">
                         {servico.quantidade || 1}
                       </td>
-                      <td className="py-3.5 px-4 text-right font-bold text-slate-900 whitespace-nowrap">
-                        {formatarMoeda(servico.valor_custo_total, cotacao.moeda)}
+                      <td className="py-3.5 px-4 text-right">
+                        <span className="inline-flex items-center text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
+                          Incluso
+                        </span>
                       </td>
                     </tr>
                   )
@@ -318,45 +314,30 @@ Qualquer dúvida estamos à disposição!`
           </div>
         </div>
 
-        {/* Resumo Financeiro da Proposta */}
+        {/* Resumo do Investimento da Proposta */}
         <div className="flex flex-col sm:flex-row justify-end items-end gap-6 pt-2">
-          <div className="w-full sm:w-80 bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-2.5">
-            <div className="flex justify-between text-xs text-slate-600">
-              <span>Soma dos Serviços:</span>
-              <span className="font-semibold text-slate-800">
-                {formatarMoeda(cotacao.valor_custo_total, cotacao.moeda)}
-              </span>
-            </div>
-
-            {cotacao.taxas_adicionais > 0 && (
-              <div className="flex justify-between text-xs text-slate-600">
-                <span>Taxas & Encargos:</span>
-                <span className="font-semibold text-slate-800">
-                  + {formatarMoeda(cotacao.taxas_adicionais, cotacao.moeda)}
-                </span>
-              </div>
-            )}
-
-            {cotacao.desconto > 0 && (
-              <div className="flex justify-between text-xs text-emerald-600 font-semibold">
-                <span>Desconto Especial:</span>
-                <span>- {formatarMoeda(cotacao.desconto, cotacao.moeda)}</span>
-              </div>
-            )}
-
-            <div className="border-t-2 border-slate-900 pt-3 flex justify-between items-baseline">
-              <div>
-                <div className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500">
-                  Valor Total da Viagem
-                </div>
-                <div className="text-xs font-semibold text-sky-700">
-                  {formatarMoeda(valorPorPessoa, cotacao.moeda)} / adulto
-                </div>
+          <div className="w-full sm:w-80 bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-3">
+            <div className="space-y-1">
+              <div className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500">
+                Valor Total da Viagem
               </div>
               <div className="text-2xl font-black text-slate-950">
                 {formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}
               </div>
+              <div className="text-xs font-semibold text-sky-700 pt-0.5">
+                {formatarMoeda(valorPorPessoa, cotacao.moeda)} / adulto ({cotacao.num_passageiros}x)
+              </div>
             </div>
+
+            {totalPassageiros > 1 && (
+              <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500 flex justify-between">
+                <span>Total de Passageiros:</span>
+                <span className="font-bold text-slate-700">
+                  {cotacao.num_passageiros} adulto(s)
+                  {cotacao.num_criancas > 0 ? ` + ${cotacao.num_criancas} criança(s)` : ''}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

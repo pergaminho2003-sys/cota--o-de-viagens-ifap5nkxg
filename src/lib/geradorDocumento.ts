@@ -30,26 +30,27 @@ export function gerarHTMLDocumentoProposta(
       const catObj = CATEGORIAS_SERVICO.find((c) => c.value === s.categoria)
       const catLabel = catObj ? catObj.label : s.categoria
       return `
-      <tr style="border-bottom: 1px solid #e2e8f0; ${idx % 2 === 1 ? 'background-color: #f8fafc;' : 'background-color: #ffffff;'}">
-        <td style="padding: 12px 14px; vertical-align: top;">
-          <span style="display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: #e0f2fe; color: #0369a1; margin-bottom: 4px;">
-            ${catLabel}
-          </span>
-          <div style="font-weight: 600; color: #0f172a; font-size: 13.5px;">${s.nome}</div>
-          ${s.descricao ? `<div style="font-size: 12px; color: #475569; margin-top: 3px; line-height: 1.4;">${s.descricao}</div>` : ''}
-          ${s.observacoes ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px; font-style: italic;">Obs: ${s.observacoes}</div>` : ''}
-        </td>
-        <td style="padding: 12px 14px; text-align: center; vertical-align: top; font-size: 13px; color: #334155; font-weight: 600;">
-          ${s.quantidade || 1}
-        </td>
-        <td style="padding: 12px 14px; text-align: right; vertical-align: top; font-size: 13.5px; color: #0f2744; font-weight: 700; white-space: nowrap;">
-          ${formatarMoeda(s.valor_custo_total, cotacao.moeda)}
-        </td>
-      </tr>
-    `
+    <tr style="border-bottom: 1px solid #e2e8f0; ${idx % 2 === 1 ? 'background-color: #f8fafc;' : 'background-color: #ffffff;'}">
+      <td style="padding: 12px 14px; vertical-align: top;">
+        <span style="display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: #e0f2fe; color: #0369a1; margin-bottom: 4px;">
+          ${catLabel}
+        </span>
+        <div style="font-weight: 600; color: #0f172a; font-size: 13.5px;">${s.nome}</div>
+        ${s.descricao ? `<div style="font-size: 12px; color: #475569; margin-top: 3px; line-height: 1.4;">${s.descricao}</div>` : ''}
+        ${s.observacoes ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px; font-style: italic;">Obs: ${s.observacoes}</div>` : ''}
+      </td>
+      <td style="padding: 12px 14px; text-align: center; vertical-align: top; font-size: 13px; color: #334155; font-weight: 600;">
+        ${s.quantidade || 1}
+      </td>
+      <td style="padding: 12px 14px; text-align: right; vertical-align: top; font-size: 12px; white-space: nowrap;">
+        <span style="display: inline-block; padding: 3px 8px; border-radius: 4px; background: #ecfdf5; color: #047857; font-weight: 700; border: 1px solid #a7f3d0;">
+          Incluso
+        </span>
+      </td>
+    </tr>
+  `
     })
     .join('')
-
   return `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -285,7 +286,6 @@ export function gerarHTMLDocumentoProposta(
           <p><strong>${agencia.nome_agencia}</strong></p>
           ${agencia.telefone_contato || agencia.whatsapp ? `<p><strong>Contato:</strong> ${agencia.telefone_contato || agencia.whatsapp}</p>` : ''}
           ${agencia.site_instagram ? `<p><strong>Redes:</strong> ${agencia.site_instagram}</p>` : ''}
-          ${cotacao.data_validade ? `<p style="color: #c2410c; font-weight: 600;"><strong>Proposta válida até:</strong> ${formatarData(cotacao.data_validade)}</p>` : ''}
         </div>
       </div>
     </div>
@@ -300,9 +300,9 @@ export function gerarHTMLDocumentoProposta(
     <table class="table-servicos">
       <thead>
         <tr>
-          <th style="text-align: left; width: 68%;">Item / Descrição do Serviço</th>
-          <th style="text-align: center; width: 12%;">Qtd</th>
-          <th style="text-align: right; width: 20%;">Total Estimado</th>
+          <th style="text-align: left; width: 70%;">Item / Descrição do Serviço</th>
+          <th style="text-align: center; width: 14%;">Qtd</th>
+          <th style="text-align: right; width: 16%;">Status</th>
         </tr>
       </thead>
       <tbody>
@@ -310,37 +310,15 @@ export function gerarHTMLDocumentoProposta(
       </tbody>
     </table>
 
-    <!-- Resumo Financeiro -->
+    <!-- Resumo do Investimento -->
     <div class="financial-box">
       <div class="total-card">
-        <div class="total-row">
-          <span>Soma dos Serviços:</span>
-          <span>${formatarMoeda(cotacao.valor_custo_total, cotacao.moeda)}</span>
+        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; margin-bottom: 4px;">
+          Investimento Total da Proposta
         </div>
-        ${
-          cotacao.taxas_adicionais > 0
-            ? `
-          <div class="total-row">
-            <span>Taxas & Encargos:</span>
-            <span>+ ${formatarMoeda(cotacao.taxas_adicionais, cotacao.moeda)}</span>
-          </div>
-        `
-            : ''
-        }
-        ${
-          cotacao.desconto > 0
-            ? `
-          <div class="total-row" style="color: #059669; font-weight: 600;">
-            <span>Desconto Especial:</span>
-            <span>- ${formatarMoeda(cotacao.desconto, cotacao.moeda)}</span>
-          </div>
-        `
-            : ''
-        }
-        <div class="total-final">
-          <div>
-            <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">Investimento Total</div>
-            <div style="font-size: 11px; color: #0369a1;">${formatarMoeda(valorPorPessoa, cotacao.moeda)} / adulto</div>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div style="font-size: 12px; color: #0369a1; font-weight: 600;">
+            ${formatarMoeda(valorPorPessoa, cotacao.moeda)} / adulto (${cotacao.num_passageiros}x)
           </div>
           <div class="total-final-val">
             ${formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}
