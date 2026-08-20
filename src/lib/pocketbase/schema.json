@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T04:30:04.956Z",
+  "generatedAt": "2026-08-20T04:34:14.681Z",
   "collections": [
     {
       "name": "users",
@@ -289,12 +289,6 @@
           "system": false
         },
         {
-          "name": "logo_base64",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
           "name": "margem_padrao",
           "type": "number",
           "required": false,
@@ -341,6 +335,12 @@
         {
           "name": "imposto_lucro_padrao",
           "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "logo",
+          "type": "file",
           "required": false,
           "system": false
         }

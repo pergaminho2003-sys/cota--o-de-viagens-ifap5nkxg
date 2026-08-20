@@ -18,10 +18,9 @@ export function gerarHTMLDocumentoProposta(
     {} as Record<string, typeof cotacao.servicos>,
   )
 
-  const logoHtml =
-    agencia.logo_base64 || agencia.logo_url
-      ? `<img src="${agencia.logo_base64 || agencia.logo_url}" alt="${agencia.nome_agencia}" style="max-height: 56px; max-width: 180px; object-fit: contain;" />`
-      : `<div style="display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; color: #0f2744; letter-spacing: -0.5px;">
+  const logoHtml = agencia.logo_url
+    ? `<img src="${agencia.logo_url}" alt="${agencia.nome_agencia}" style="max-height: 56px; max-width: 180px; object-fit: contain;" />`
+    : `<div style="display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; color: #0f2744; letter-spacing: -0.5px;">
         <span style="background: linear-gradient(135deg, #0f2744, #1e4976); color: #fff; width: 36px; height: 36px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px;">✈</span>
         <span>${agencia.nome_agencia || 'AGÊNCIA DE VIAGENS'}</span>
        </div>`

@@ -25,6 +25,8 @@ interface DialogConfigAgenciaProps {
 export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfigAgenciaProps) {
   const [loading, setLoading] = useState(false)
   const [salvando, setSalvando] = useState(false)
+  const [arquivoLogo, setArquivoLogo] = useState<File | null | undefined>(undefined)
+  const [previewUrl, setPreviewUrl] = useState<string>('')
   const [config, setConfig] = useState<ConfiguracoesAgencia>({
     nome_agencia: 'Aura Viagens & Turismo',
     cnpj_cadastur: '',
@@ -33,8 +35,8 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
     whatsapp: '',
     endereco: '',
     site_instagram: '',
+    logo: '',
     logo_url: '',
-    logo_base64: '',
     margem_padrao: 15,
     imposto_lucro_padrao: 6,
     validade_padrao_dias: 7,
@@ -54,6 +56,8 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
     try {
       const dados = await configAgenciaService.obter()
       setConfig(dados)
+      setArquivoLogo(undefined)
+      setPreviewUrl(dados.logo_url || '')
     } catch (err) {
       console.error(err)
       toast.error('Erro ao carregar dados da agência')
@@ -66,7 +70,7 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
     e.preventDefault()
     setSalvando(true)
     try {
-      const atualizado = await configAgenciaService.salvar(config)
+      const atualizado = await configAgenciaService.salvar(config, arquivoLogo)
       toast.success('Configurações da agência salvas com sucesso!')
       onSaved?.(atualizado)
       onOpenChange(false)
@@ -91,21 +95,21 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('A imagem deve ter no máximo 2MB')
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 5MB')
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      setConfig((prev) => ({ ...prev, logo_base64: reader.result as string }))
-      toast.success('Logo carregada com sucesso')
-    }
-    reader.readAsDataURL(file)
+    setArquivoLogo(file)
+    const localUrl = URL.createObjectURL(file)
+    setPreviewUrl(localUrl)
+    toast.success('Logo selecionada para envio')
   }
 
   const handleRemoverLogo = () => {
-    setConfig((prev) => ({ ...prev, logo_base64: '', logo_url: '' }))
+    setArquivoLogo(null)
+    setPreviewUrl('')
+    setConfig((prev) => ({ ...prev, logo: '', logo_url: '' }))
   }
 
   return (
@@ -138,9 +142,9 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
               </Label>
               <div className="flex items-center gap-4">
                 <div className="w-24 h-16 rounded-md border-2 border-dashed border-slate-300 bg-white flex items-center justify-center overflow-hidden p-1">
-                  {config.logo_base64 || config.logo_url ? (
+                  {previewUrl ? (
                     <img
-                      src={config.logo_base64 || config.logo_url}
+                      src={previewUrl}
                       alt="Logo Agência"
                       className="max-h-full max-w-full object-contain"
                     />
@@ -160,7 +164,7 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
                         onChange={handleLogoUpload}
                       />
                     </label>
-                    {(config.logo_base64 || config.logo_url) && (
+                    {previewUrl && (
                       <Button
                         type="button"
                         variant="ghost"
@@ -174,7 +178,7 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
                     )}
                   </div>
                   <p className="text-xs text-slate-500">
-                    Recomendado: imagem retangular com fundo transparente ou branco.
+                    Recomendado: imagem retangular com fundo transparente ou branco (máx 5MB).
                   </p>
                 </div>
               </div>

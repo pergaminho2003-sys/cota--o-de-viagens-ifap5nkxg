@@ -144,9 +144,9 @@ Qualquer dúvida estamos à disposição!`
         {/* Header da Proposta */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 border-b-2 border-slate-900 pb-6">
           <div className="space-y-1">
-            {configAgencia.logo_base64 || configAgencia.logo_url ? (
+            {configAgencia.logo_url ? (
               <img
-                src={configAgencia.logo_base64 || configAgencia.logo_url}
+                src={configAgencia.logo_url}
                 alt={configAgencia.nome_agencia}
                 className="max-h-16 max-w-[220px] object-contain mb-2"
               />

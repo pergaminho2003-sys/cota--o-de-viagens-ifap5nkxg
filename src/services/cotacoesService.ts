@@ -120,6 +120,11 @@ export const configAgenciaService = {
       })
       if (records.items.length > 0) {
         const r = records.items[0]
+        const logoFile = (r.logo as string) || ''
+        let resolvedLogoUrl = (r.logo_url as string) || ''
+        if (logoFile) {
+          resolvedLogoUrl = pb.files.getUrl(r, logoFile)
+        }
         return {
           id: r.id,
           nome_agencia: r.nome_agencia || 'Sua Agência de Viagens',
@@ -129,8 +134,8 @@ export const configAgenciaService = {
           whatsapp: r.whatsapp || '',
           endereco: r.endereco || '',
           site_instagram: r.site_instagram || '',
-          logo_url: r.logo_url || '',
-          logo_base64: r.logo_base64 || '',
+          logo: logoFile,
+          logo_url: resolvedLogoUrl,
           margem_padrao: Number(r.margem_padrao) || 15,
           imposto_lucro_padrao:
             r.imposto_lucro_padrao !== undefined &&
@@ -171,63 +176,87 @@ export const configAgenciaService = {
     }
   },
 
-  async salvar(dados: ConfiguracoesAgencia): Promise<ConfiguracoesAgencia> {
-    // Sanitização e formatação estrita do payload de acordo com o schema da collection
-    const sanitizarPayload = (item: Partial<ConfiguracoesAgencia>) => {
-      const payload: Record<string, string | number> = {
-        nome_agencia: (item.nome_agencia || 'Sua Agência de Viagens').trim(),
-        cnpj_cadastur: item.cnpj_cadastur ? String(item.cnpj_cadastur).trim() : '',
-        email_contato: item.email_contato ? String(item.email_contato).trim() : '',
-        telefone_contato: item.telefone_contato ? String(item.telefone_contato).trim() : '',
-        whatsapp: item.whatsapp ? String(item.whatsapp).trim() : '',
-        endereco: item.endereco ? String(item.endereco).trim() : '',
-        site_instagram: item.site_instagram ? String(item.site_instagram).trim() : '',
-        logo_url: item.logo_url ? String(item.logo_url).trim() : '',
-        logo_base64: item.logo_base64 ? String(item.logo_base64) : '',
-        margem_padrao: Math.max(0, Number(item.margem_padrao) || 0),
-        validade_padrao_dias: Math.max(1, Math.round(Number(item.validade_padrao_dias) || 7)),
-        condicoes_padrao: item.condicoes_padrao ? String(item.condicoes_padrao).trim() : '',
-        formas_pagamento_padrao: item.formas_pagamento_padrao
-          ? String(item.formas_pagamento_padrao).trim()
-          : '',
-        mensagem_agradecimento: item.mensagem_agradecimento
-          ? String(item.mensagem_agradecimento).trim()
-          : '',
-        imposto_lucro_padrao: Math.max(0, Number(item.imposto_lucro_padrao) || 0),
-      }
-      return payload
+  async salvar(
+    dados: ConfiguracoesAgencia,
+    arquivoLogo?: File | null,
+  ): Promise<ConfiguracoesAgencia> {
+    const formData = new FormData()
+
+    formData.append('nome_agencia', (dados.nome_agencia || 'Sua Agência de Viagens').trim())
+    formData.append('cnpj_cadastur', dados.cnpj_cadastur ? String(dados.cnpj_cadastur).trim() : '')
+    formData.append('email_contato', dados.email_contato ? String(dados.email_contato).trim() : '')
+    formData.append(
+      'telefone_contato',
+      dados.telefone_contato ? String(dados.telefone_contato).trim() : '',
+    )
+    formData.append('whatsapp', dados.whatsapp ? String(dados.whatsapp).trim() : '')
+    formData.append('endereco', dados.endereco ? String(dados.endereco).trim() : '')
+    formData.append(
+      'site_instagram',
+      dados.site_instagram ? String(dados.site_instagram).trim() : '',
+    )
+    formData.append('margem_padrao', String(Math.max(0, Number(dados.margem_padrao) || 0)))
+    formData.append(
+      'imposto_lucro_padrao',
+      String(Math.max(0, Number(dados.imposto_lucro_padrao) || 0)),
+    )
+    formData.append(
+      'validade_padrao_dias',
+      String(Math.max(1, Math.round(Number(dados.validade_padrao_dias) || 7))),
+    )
+    formData.append(
+      'condicoes_padrao',
+      dados.condicoes_padrao ? String(dados.condicoes_padrao).trim() : '',
+    )
+    formData.append(
+      'formas_pagamento_padrao',
+      dados.formas_pagamento_padrao ? String(dados.formas_pagamento_padrao).trim() : '',
+    )
+    formData.append(
+      'mensagem_agradecimento',
+      dados.mensagem_agradecimento ? String(dados.mensagem_agradecimento).trim() : '',
+    )
+
+    // Se um novo arquivo de logo for enviado
+    if (arquivoLogo instanceof File) {
+      formData.append('logo', arquivoLogo)
+      formData.append('logo_url', '')
+    } else if (arquivoLogo === null) {
+      // Remover logo existente
+      formData.append('logo', '')
+      formData.append('logo_url', '')
+    } else if (dados.logo_url) {
+      // Manter ou atualizar URL externa
+      formData.append('logo_url', String(dados.logo_url).trim())
     }
-
-    const payload = sanitizarPayload(dados)
-    let targetId = dados.id
-
-    // Log preliminar
-    console.log('[configAgenciaService.salvar] Enviando payload sanitizado:', {
-      targetId,
-      payload,
-    })
 
     const tentarSalvarOuAtualizar = async (recordId?: string) => {
       if (recordId) {
-        return await pb.collection('configuracoes_agencia').update(recordId, payload)
+        return await pb.collection('configuracoes_agencia').update(recordId, formData)
       } else {
         const list = await pb
           .collection('configuracoes_agencia')
           .getList(1, 1, { sort: '-created' })
         if (list.items.length > 0) {
-          return await pb.collection('configuracoes_agencia').update(list.items[0].id, payload)
+          return await pb.collection('configuracoes_agencia').update(list.items[0].id, formData)
         } else {
-          return await pb.collection('configuracoes_agencia').create(payload)
+          return await pb.collection('configuracoes_agencia').create(formData)
         }
       }
     }
 
     try {
-      const rec = await tentarSalvarOuAtualizar(targetId)
+      const rec = await tentarSalvarOuAtualizar(dados.id)
+      const logoFile = (rec.logo as string) || ''
+      const resolvedLogoUrl = logoFile
+        ? pb.files.getUrl(rec, logoFile)
+        : (rec.logo_url as string) || ''
+
       return {
         ...dados,
-        ...rec,
         id: rec.id,
+        logo: logoFile,
+        logo_url: resolvedLogoUrl,
         created: rec.created,
         updated: rec.updated,
       } as ConfiguracoesAgencia
@@ -247,8 +276,7 @@ export const configAgenciaService = {
         fullError: err,
       })
 
-      // Fallback: se falhar com erro 400 ao tentar atualizar com id específico,
-      // busca o registro mais recente do servidor, faz merge dos dados e tenta novamente
+      // Fallback: buscar o registro mais recente do servidor e tentar novamente
       try {
         console.warn(
           '[configAgenciaService.salvar] Tentando fallback de sincronização com o servidor...',
@@ -258,40 +286,38 @@ export const configAgenciaService = {
           .getList(1, 1, { sort: '-created' })
         if (records.items.length > 0) {
           const first = records.items[0]
-          console.log('[configAgenciaService.salvar] Fallback encontrou registro:', first.id)
-          const rec = await pb.collection('configuracoes_agencia').update(first.id, payload)
+          const rec = await pb.collection('configuracoes_agencia').update(first.id, formData)
+          const logoFile = (rec.logo as string) || ''
+          const resolvedLogoUrl = logoFile
+            ? pb.files.getUrl(rec, logoFile)
+            : (rec.logo_url as string) || ''
+
           return {
             ...dados,
-            ...rec,
             id: rec.id,
+            logo: logoFile,
+            logo_url: resolvedLogoUrl,
             created: rec.created,
             updated: rec.updated,
           } as ConfiguracoesAgencia
         } else {
-          console.log('[configAgenciaService.salvar] Fallback criando novo registro')
-          const rec = await pb.collection('configuracoes_agencia').create(payload)
+          const rec = await pb.collection('configuracoes_agencia').create(formData)
+          const logoFile = (rec.logo as string) || ''
+          const resolvedLogoUrl = logoFile
+            ? pb.files.getUrl(rec, logoFile)
+            : (rec.logo_url as string) || ''
+
           return {
             ...dados,
-            ...rec,
             id: rec.id,
+            logo: logoFile,
+            logo_url: resolvedLogoUrl,
             created: rec.created,
             updated: rec.updated,
           } as ConfiguracoesAgencia
         }
       } catch (fallbackErr: unknown) {
-        const fbErr = fallbackErr as {
-          status?: number
-          message?: string
-          data?: Record<string, unknown>
-          response?: Record<string, unknown>
-        }
-        console.error('[configAgenciaService.salvar] Erro no fallback detalhado:', {
-          status: fbErr?.status,
-          message: fbErr?.message,
-          data: fbErr?.data,
-          response: fbErr?.response,
-          fullError: fallbackErr,
-        })
+        console.error('[configAgenciaService.salvar] Erro no fallback detalhado:', fallbackErr)
         throw fallbackErr
       }
     }

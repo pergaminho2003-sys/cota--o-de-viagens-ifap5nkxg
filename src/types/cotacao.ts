@@ -66,8 +66,8 @@ export interface ConfiguracoesAgencia {
   whatsapp?: string
   endereco?: string
   site_instagram?: string
+  logo?: string // Nome do arquivo de logo armazenado no PocketBase
   logo_url?: string
-  logo_base64?: string
   margem_padrao?: number
   imposto_lucro_padrao?: number // Porcentagem de imposto sobre o lucro, ex: 6%
   validade_padrao_dias?: number
