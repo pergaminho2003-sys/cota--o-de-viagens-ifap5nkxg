@@ -42,131 +42,178 @@ export function calcularDuracaoDias(dataIda?: string, dataVolta?: string): numbe
   }
 }
 
+import { ModoPrecificacao } from '@/types/cotacao'
+
 export interface TotaisCalculados {
+  modoPrecificacao: ModoPrecificacao
   valorCustoTotal: number
+  // Valores do Modo A (Margem)
+  margemDesejadaPercent: number
+  precoVendaModoA: number
+  lucroBrutoModoA: number
+  aliquotaImpostoLucro: number
+  impostoModoA: number
+  lucroLiquidoModoA: number
+  margemLiquidaModoAPercent: number
+  economiaModoAReais: number
+  economiaModoAPercent: number
+  // Valores do Modo B (Desconto de Mercado)
+  precoMercado?: number
+  descontoMercadoPercent: number
+  precoVendaModoB: number
+  lucroBrutoModoB: number
+  impostoModoB: number
+  lucroLiquidoModoB: number
+  margemRealResultanteModoBPercent: number
+  economiaModoBReais: number
+  economiaModoBPercent: number
+  // Valores Efetivos baseados no modo selecionado + taxas e desconto avulso
   valorMargemLucro: number
   valorSubtotalComMargem: number
-  aliquotaImpostoLucro: number
   valorImpostoLucro: number
   valorLucroLiquido: number
-  margemLiquidaCheiaPercent: number
+  margemLiquidaEfetivaPercent: number
   valorTaxas: number
   valorDesconto: number
   valorFinalVenda: number
   valorPorPessoa: number
-}
-
-export interface SimulacaoDescontoResultado {
-  precoVendaCheio: number
-  lucroBrutoCheio: number
-  impostoCheio: number
-  lucroLiquidoCheio: number
-  margemLiquidaCheiaPercent: number
-  precoFinalMinimo: number
-  descontoMaximoReais: number
-  descontoMaximoPercent: number
-  impostoPagoCenarioMinimo: number
-  lucroLiquidoMinimo: number
-  margemLiquidaFinalPercent: number
   economiaClienteReais: number
-  percentualEconomiaMercado: number
-  precoMercado?: number
-  margemMinimaAceitavelPercent?: number
-  possuiSimulacaoValida: boolean
+  economiaClientePercent: number
+  temVantagemComercial: boolean
 }
 
-export function calcularSimulacaoDesconto(params: {
+export interface CenarioPrecificacaoModoA {
+  precoFinal: number
+  margemRealPercent: number
+  lucroBruto: number
+  imposto: number
+  lucroLiquido: number
+  margemLiquidaPercent: number
+  economiaClienteReais: number
+  economiaClientePercent: number
+  temEconomia: boolean
+}
+
+export interface CenarioPrecificacaoModoB {
+  precoFinal: number
+  descontoAplicadoPercent: number
+  precoMercado: number
+  lucroBruto: number
+  imposto: number
+  lucroLiquido: number
+  margemRealResultantePercent: number
+  margemLiquidaPercent: number
+  economiaClienteReais: number
+  economiaClientePercent: number
+  valido: boolean
+}
+
+export function calcularCenarioModoA(params: {
   custoTotal: number
-  markupPercent: number
+  margemPercent: number
   impostoPercent: number
   precoMercado?: number
-  margemMinimaAceitavelPercent?: number
-}): SimulacaoDescontoResultado {
+}): CenarioPrecificacaoModoA {
   const custo = Math.max(0, Number(params.custoTotal) || 0)
-  const markup = Number(params.markupPercent) || 0
-  const impostoAliquota = (Number(params.impostoPercent) || 0) / 100 // imposto % em decimal, ex: 0.06
-  const margemMinima =
-    params.margemMinimaAceitavelPercent !== undefined &&
-    params.margemMinimaAceitavelPercent !== null &&
-    !isNaN(Number(params.margemMinimaAceitavelPercent))
-      ? Number(params.margemMinimaAceitavelPercent)
-      : 10
-  const margemMinimaDecimal = margemMinima / 100
+  const margem = Number(params.margemPercent) || 0
+  const aliquotaImposto = (Number(params.impostoPercent) || 0) / 100
   const precoMercado =
     params.precoMercado !== undefined &&
-    params.precoMercado !== null &&
     !isNaN(Number(params.precoMercado)) &&
     Number(params.precoMercado) > 0
       ? Number(params.precoMercado)
       : undefined
 
-  // Cenário Cheio
-  const precoVendaCheio = custo * (1 + markup / 100)
-  const lucroBrutoCheio = precoVendaCheio - custo
-  const impostoCheio = lucroBrutoCheio * impostoAliquota
-  const lucroLiquidoCheio = lucroBrutoCheio - impostoCheio
-  const margemLiquidaCheiaPercent =
-    precoVendaCheio > 0 ? (lucroLiquidoCheio / precoVendaCheio) * 100 : 0
+  // Modo A: Preço final = Custo × (1 + margem % desejada)
+  const precoFinal = custo * (1 + margem / 100)
+  const lucroBruto = Math.max(0, precoFinal - custo)
+  const imposto = lucroBruto * aliquotaImposto
+  const lucroLiquido = lucroBruto - imposto
+  const margemRealPercent = margem
+  const margemLiquidaPercent = precoFinal > 0 ? (lucroLiquido / precoFinal) * 100 : 0
 
-  // Preço final mínimo
-  // Fórmula: Preço final mínimo = [Custo × (1 − imposto %)] ÷ [1 − imposto % − margem mínima aceitável %]
-  const denominador = 1 - impostoAliquota - margemMinimaDecimal
-  let precoFinalMinimo = 0
-  if (denominador > 0 && custo > 0) {
-    precoFinalMinimo = (custo * (1 - impostoAliquota)) / denominador
-  } else if (custo === 0) {
-    precoFinalMinimo = 0
-  } else {
-    // Se denominador <= 0 (margem + imposto >= 100%), fallback seguro para não dividir por zero
-    precoFinalMinimo = precoVendaCheio
-  }
-
-  // Lucro bruto e imposto no cenário com desconto máximo
-  const lucroBrutoCenarioMinimo = Math.max(0, precoFinalMinimo - custo)
-  const impostoPagoCenarioMinimo = lucroBrutoCenarioMinimo * impostoAliquota
-  const lucroLiquidoMinimo = lucroBrutoCenarioMinimo - impostoPagoCenarioMinimo
-  const margemLiquidaFinalPercent =
-    precoFinalMinimo > 0 ? (lucroLiquidoMinimo / precoFinalMinimo) * 100 : margemMinima
-
-  // Desconto máximo
-  const descontoMaximoReais = Math.max(0, precoVendaCheio - precoFinalMinimo)
-  const descontoMaximoPercent =
-    precoVendaCheio > 0 ? (descontoMaximoReais / precoVendaCheio) * 100 : 0
-
-  // Economia do cliente frente ao mercado
   let economiaClienteReais = 0
-  let percentualEconomiaMercado = 0
-  if (precoMercado !== undefined && precoMercado > 0) {
-    economiaClienteReais = Math.max(0, precoMercado - precoFinalMinimo)
-    percentualEconomiaMercado = (economiaClienteReais / precoMercado) * 100
-  }
+  let economiaClientePercent = 0
+  let temEconomia = false
 
-  const possuiSimulacaoValida =
-    custo > 0 && precoVendaCheio > 0 && precoMercado !== undefined && precoMercado > 0
+  if (precoMercado !== undefined && precoMercado > precoFinal) {
+    economiaClienteReais = precoMercado - precoFinal
+    economiaClientePercent = (economiaClienteReais / precoMercado) * 100
+    temEconomia = true
+  }
 
   return {
-    precoVendaCheio,
-    lucroBrutoCheio,
-    impostoCheio,
-    lucroLiquidoCheio,
-    margemLiquidaCheiaPercent,
-    precoFinalMinimo,
-    descontoMaximoReais,
-    descontoMaximoPercent,
-    impostoPagoCenarioMinimo,
-    lucroLiquidoMinimo,
-    margemLiquidaFinalPercent,
+    precoFinal,
+    margemRealPercent,
+    lucroBruto,
+    imposto,
+    lucroLiquido,
+    margemLiquidaPercent,
     economiaClienteReais,
-    percentualEconomiaMercado,
+    economiaClientePercent,
+    temEconomia,
+  }
+}
+
+export function calcularCenarioModoB(params: {
+  custoTotal: number
+  precoMercado?: number
+  descontoPercent: number
+  impostoPercent: number
+}): CenarioPrecificacaoModoB {
+  const custo = Math.max(0, Number(params.custoTotal) || 0)
+  const precoMercado =
+    params.precoMercado !== undefined &&
+    !isNaN(Number(params.precoMercado)) &&
+    Number(params.precoMercado) > 0
+      ? Number(params.precoMercado)
+      : 0
+  const desconto = Number(params.descontoPercent) || 0
+  const aliquotaImposto = (Number(params.impostoPercent) || 0) / 100
+
+  const valido = precoMercado > 0
+
+  // Modo B: Preço final = Preço de mercado × (1 − desconto % que vou dar)
+  const precoFinal = valido ? Math.max(0, precoMercado * (1 - desconto / 100)) : 0
+
+  // Lucro bruto = Preço final - Custo
+  const lucroBruto = Math.max(0, precoFinal - custo)
+  // Imposto = (Preço final − Custo total) × aliquota_imposto
+  const imposto = precoFinal - custo > 0 ? (precoFinal - custo) * aliquotaImposto : 0
+  const lucroLiquido = precoFinal - custo - imposto
+
+  // Margem real resultante = (Preço final − Custo − Imposto) ÷ Preço final
+  const margemRealResultantePercent =
+    precoFinal > 0 ? ((precoFinal - custo - imposto) / precoFinal) * 100 : 0
+
+  const margemLiquidaPercent = margemRealResultantePercent
+
+  // Economia do cliente = Preço de mercado − Preço final
+  const economiaClienteReais = valido ? Math.max(0, precoMercado - precoFinal) : 0
+  const economiaClientePercent =
+    valido && precoMercado > 0 ? (economiaClienteReais / precoMercado) * 100 : 0
+
+  return {
+    precoFinal,
+    descontoAplicadoPercent: desconto,
     precoMercado,
-    margemMinimaAceitavelPercent: margemMinima,
-    possuiSimulacaoValida,
+    lucroBruto,
+    imposto,
+    lucroLiquido,
+    margemRealResultantePercent,
+    margemLiquidaPercent,
+    economiaClienteReais,
+    economiaClientePercent,
+    valido,
   }
 }
 
 export function calcularTotaisCotacao(params: {
   servicos: Array<{ valor_custo_total?: number; valor_unitario?: number; quantidade?: number }>
+  modoPrecificacao?: ModoPrecificacao
   margemLucroPercent: number
+  descontoMercadoPercent?: number
+  precoMercado?: number
   desconto: number
   taxasAdicionais: number
   numPassageiros: number
@@ -179,35 +226,109 @@ export function calcularTotaisCotacao(params: {
     return acc + custo
   }, 0)
 
-  const margem = Number(params.margemLucroPercent) || 0
-  const valorMargemLucro = (valorCustoTotal * margem) / 100
-  const valorSubtotalComMargem = valorCustoTotal + valorMargemLucro
-
+  const modoPrecificacao: ModoPrecificacao = params.modoPrecificacao || 'margem'
   const aliquotaImpostoLucro =
     params.impostoLucroPercent !== undefined ? Number(params.impostoLucroPercent) : 6
-  const valorImpostoLucro = (valorMargemLucro * (aliquotaImpostoLucro || 0)) / 100
-  const valorLucroLiquido = valorMargemLucro - valorImpostoLucro
-  const margemLiquidaCheiaPercent =
-    valorSubtotalComMargem > 0 ? (valorLucroLiquido / valorSubtotalComMargem) * 100 : 0
+  const margemDesejadaPercent = Number(params.margemLucroPercent) || 0
+  const descontoMercadoPercent = Number(params.descontoMercadoPercent) || 0
+
+  const precoMercado =
+    params.precoMercado !== undefined &&
+    !isNaN(Number(params.precoMercado)) &&
+    Number(params.precoMercado) > 0
+      ? Number(params.precoMercado)
+      : undefined
+
+  // Simulação Modo A
+  const cenarioA = calcularCenarioModoA({
+    custoTotal: valorCustoTotal,
+    margemPercent: margemDesejadaPercent,
+    impostoPercent: aliquotaImpostoLucro,
+    precoMercado,
+  })
+
+  // Simulação Modo B
+  const cenarioB = calcularCenarioModoB({
+    custoTotal: valorCustoTotal,
+    precoMercado,
+    descontoPercent: descontoMercadoPercent,
+    impostoPercent: aliquotaImpostoLucro,
+  })
+
+  // Determinar valores conforme modo selecionado
+  let precoBaseModo = 0
+  let valorMargemLucro = 0
+  let valorImpostoLucro = 0
+  let valorLucroLiquido = 0
+  let margemLiquidaEfetivaPercent = 0
+  let economiaClienteReais = 0
+  let economiaClientePercent = 0
+  let temVantagemComercial = false
+
+  if (modoPrecificacao === 'desconto_mercado' && cenarioB.valido) {
+    precoBaseModo = cenarioB.precoFinal
+    valorMargemLucro = cenarioB.lucroBruto
+    valorImpostoLucro = cenarioB.imposto
+    valorLucroLiquido = cenarioB.lucroLiquido
+    margemLiquidaEfetivaPercent = cenarioB.margemRealResultantePercent
+    economiaClienteReais = cenarioB.economiaClienteReais
+    economiaClientePercent = cenarioB.economiaClientePercent
+    temVantagemComercial = cenarioB.economiaClienteReais > 0
+  } else {
+    // Modo Margem (padrão)
+    precoBaseModo = cenarioA.precoFinal
+    valorMargemLucro = cenarioA.lucroBruto
+    valorImpostoLucro = cenarioA.imposto
+    valorLucroLiquido = cenarioA.lucroLiquido
+    margemLiquidaEfetivaPercent = cenarioA.margemLiquidaPercent
+    economiaClienteReais = cenarioA.economiaClienteReais
+    economiaClientePercent = cenarioA.economiaClientePercent
+    temVantagemComercial = cenarioA.temEconomia
+  }
 
   const taxas = Number(params.taxasAdicionais) || 0
   const desconto = Number(params.desconto) || 0
 
-  const valorFinalVenda = Math.max(0, valorSubtotalComMargem + taxas - desconto)
+  const valorSubtotalComMargem = precoBaseModo
+  const valorFinalVenda = Math.max(0, precoBaseModo + taxas - desconto)
   const passageiros = Math.max(1, Number(params.numPassageiros) || 1)
   const valorPorPessoa = valorFinalVenda / passageiros
 
   return {
+    modoPrecificacao,
     valorCustoTotal,
+    // Modo A
+    margemDesejadaPercent,
+    precoVendaModoA: cenarioA.precoFinal,
+    lucroBrutoModoA: cenarioA.lucroBruto,
+    aliquotaImpostoLucro,
+    impostoModoA: cenarioA.imposto,
+    lucroLiquidoModoA: cenarioA.lucroLiquido,
+    margemLiquidaModoAPercent: cenarioA.margemLiquidaPercent,
+    economiaModoAReais: cenarioA.economiaClienteReais,
+    economiaModoAPercent: cenarioA.economiaClientePercent,
+    // Modo B
+    precoMercado,
+    descontoMercadoPercent,
+    precoVendaModoB: cenarioB.precoFinal,
+    lucroBrutoModoB: cenarioB.lucroBruto,
+    impostoModoB: cenarioB.imposto,
+    lucroLiquidoModoB: cenarioB.lucroLiquido,
+    margemRealResultanteModoBPercent: cenarioB.margemRealResultantePercent,
+    economiaModoBReais: cenarioB.economiaClienteReais,
+    economiaModoBPercent: cenarioB.economiaClientePercent,
+    // Efetivos
     valorMargemLucro,
     valorSubtotalComMargem,
-    aliquotaImpostoLucro,
     valorImpostoLucro,
     valorLucroLiquido,
-    margemLiquidaCheiaPercent,
+    margemLiquidaEfetivaPercent,
     valorTaxas: taxas,
     valorDesconto: desconto,
     valorFinalVenda,
     valorPorPessoa,
+    economiaClienteReais,
+    economiaClientePercent,
+    temVantagemComercial,
   }
 }

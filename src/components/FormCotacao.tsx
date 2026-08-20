@@ -7,8 +7,14 @@ import {
   ConfiguracoesAgencia,
   StatusCotacao,
   Moeda,
+  ModoPrecificacao,
 } from '@/types/cotacao'
-import { calcularTotaisCotacao, calcularSimulacaoDesconto, formatarMoeda } from '@/lib/calculos'
+import {
+  calcularTotaisCotacao,
+  calcularCenarioModoA,
+  calcularCenarioModoB,
+  formatarMoeda,
+} from '@/lib/calculos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -84,11 +90,22 @@ export function FormCotacao({
   // Services
   const [servicos, setServicos] = useState<ServicoItem[]>(cotacaoInicial?.servicos || [])
 
-  // Pricing
+  // Pricing & Modes
+  const [modoPrecificacao, setModoPrecificacao] = useState<ModoPrecificacao>(
+    cotacaoInicial?.modo_precificacao || 'margem',
+  )
   const [margemLucro, setMargemLucro] = useState<number>(
     cotacaoInicial?.margem_lucro !== undefined
       ? cotacaoInicial.margem_lucro
       : (configAgencia.margem_padrao ?? 15),
+  )
+  const [descontoMercadoPercentual, setDescontoMercadoPercentual] = useState<number>(
+    cotacaoInicial?.desconto_mercado_percentual ?? 10,
+  )
+  const [precoMercado, setPrecoMercado] = useState<number | undefined>(
+    cotacaoInicial?.preco_mercado !== undefined && cotacaoInicial.preco_mercado !== null
+      ? cotacaoInicial.preco_mercado
+      : undefined,
   )
   const [desconto, setDesconto] = useState<number>(cotacaoInicial?.desconto ?? 0)
   const [taxasAdicionais, setTaxasAdicionais] = useState<number>(
@@ -96,13 +113,6 @@ export function FormCotacao({
   )
   const [moeda, setMoeda] = useState<Moeda>(cotacaoInicial?.moeda || 'BRL')
   const [cotacaoMoeda, setCotacaoMoeda] = useState<number>(cotacaoInicial?.cotacao_moeda ?? 1)
-
-  // Simulação de Desconto
-  const [precoMercado, setPrecoMercado] = useState<number | undefined>(
-    cotacaoInicial?.preco_mercado !== undefined && cotacaoInicial.preco_mercado !== null
-      ? cotacaoInicial.preco_mercado
-      : undefined,
-  )
   const [margemMinimaAceitavel, setMargemMinimaAceitavel] = useState<number>(
     cotacaoInicial?.margem_minima_aceitavel !== undefined &&
       cotacaoInicial.margem_minima_aceitavel !== null
@@ -130,23 +140,45 @@ export function FormCotacao({
   const totais = useMemo(() => {
     return calcularTotaisCotacao({
       servicos,
+      modoPrecificacao,
       margemLucroPercent: margemLucro,
+      descontoMercadoPercent: descontoMercadoPercentual,
+      precoMercado,
       desconto,
       taxasAdicionais,
       numPassageiros,
       impostoLucroPercent: impostoAliquota,
     })
-  }, [servicos, margemLucro, desconto, taxasAdicionais, numPassageiros, impostoAliquota])
+  }, [
+    servicos,
+    modoPrecificacao,
+    margemLucro,
+    descontoMercadoPercentual,
+    precoMercado,
+    desconto,
+    taxasAdicionais,
+    numPassageiros,
+    impostoAliquota,
+  ])
 
-  const simulacao = useMemo(() => {
-    return calcularSimulacaoDesconto({
+  // Comparações dos 2 cenários para decisão interna
+  const cenarioA = useMemo(() => {
+    return calcularCenarioModoA({
       custoTotal: totais.valorCustoTotal,
-      markupPercent: margemLucro,
+      margemPercent: margemLucro,
       impostoPercent: impostoAliquota,
       precoMercado,
-      margemMinimaAceitavelPercent: margemMinimaAceitavel,
     })
-  }, [totais.valorCustoTotal, margemLucro, impostoAliquota, precoMercado, margemMinimaAceitavel])
+  }, [totais.valorCustoTotal, margemLucro, impostoAliquota, precoMercado])
+
+  const cenarioB = useMemo(() => {
+    return calcularCenarioModoB({
+      custoTotal: totais.valorCustoTotal,
+      precoMercado,
+      descontoPercent: descontoMercadoPercentual,
+      impostoPercent: impostoAliquota,
+    })
+  }, [totais.valorCustoTotal, precoMercado, descontoMercadoPercentual, impostoAliquota])
 
   // Set default validity date if not set
   useEffect(() => {
@@ -224,7 +256,10 @@ export function FormCotacao({
       num_criancas: numCriancas,
       status,
       servicos,
+      modo_precificacao: modoPrecificacao,
       margem_lucro: margemLucro,
+      desconto_mercado_percentual:
+        modoPrecificacao === 'desconto_mercado' ? descontoMercadoPercentual : undefined,
       desconto,
       taxas_adicionais: taxasAdicionais,
       moeda,
@@ -233,7 +268,10 @@ export function FormCotacao({
       valor_lucro: totais.valorMargemLucro,
       valor_venda_total: totais.valorFinalVenda,
       preco_mercado:
-        precoMercado !== undefined && precoMercado !== null && !isNaN(precoMercado)
+        precoMercado !== undefined &&
+        precoMercado !== null &&
+        !isNaN(precoMercado) &&
+        precoMercado > 0
           ? precoMercado
           : undefined,
       margem_minima_aceitavel: margemMinimaAceitavel,
@@ -247,21 +285,34 @@ export function FormCotacao({
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
+  const validarFormulario = (): boolean => {
     if (!clienteNome.trim()) {
       toast.error('Informe o nome do cliente')
-      return
+      return false
     }
     if (!destino.trim()) {
       toast.error('Informe o destino da viagem')
-      return
+      return false
     }
     if (servicos.length === 0) {
       toast.error('Adicione pelo menos um serviço ou item à cotação')
-      return
+      return false
     }
+    if (modoPrecificacao === 'desconto_mercado') {
+      if (!precoMercado || precoMercado <= 0) {
+        toast.error(
+          'No Modo B (Desconto de Mercado), o Preço de Mercado é obrigatório e deve ser maior que zero.',
+        )
+        return false
+      }
+    }
+    return true
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!validarFormulario()) return
 
     const payload = montarObjetoCotacao()
     await onSalvar(payload, cotacaoInicial?.id)
@@ -270,6 +321,12 @@ export function FormCotacao({
   const handlePrevisualizar = () => {
     if (!clienteNome.trim() || !destino.trim()) {
       toast.error('Preencha ao menos o nome do cliente e o destino para visualizar a cotação')
+      return
+    }
+    if (modoPrecificacao === 'desconto_mercado' && (!precoMercado || precoMercado <= 0)) {
+      toast.error(
+        'No Modo B (Desconto de Mercado), informe o Preço de Mercado antes de visualizar a proposta.',
+      )
       return
     }
     const cotacao = montarObjetoCotacao()
@@ -912,58 +969,234 @@ export function FormCotacao({
               </div>
 
               <CardContent className="p-5 space-y-5 text-slate-200">
-                {/* Margem de Lucro Input & Quick Options */}
-                <div className="space-y-2.5 bg-slate-800/60 p-3.5 rounded-lg border border-slate-700/80">
+                {/* 1. SELETOR OBRIGATÓRIO DE MODO DE PRECIFICAÇÃO */}
+                <div className="space-y-2 bg-slate-800/80 p-3.5 rounded-xl border border-sky-600/40 shadow-inner">
                   <div className="flex items-center justify-between">
-                    <Label
-                      htmlFor="margemLucro"
-                      className="text-xs font-semibold text-sky-300 flex items-center gap-1"
-                    >
-                      <Percent className="w-3.5 h-3.5" /> Margem de Lucro da Agência
+                    <Label className="text-xs font-bold text-sky-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <TrendingUp className="w-4 h-4 text-sky-400" /> Modo de Precificação *
                     </Label>
-                    <span className="text-sm font-black text-sky-400">{margemLucro}%</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800">
+                      {modoPrecificacao === 'margem' ? 'Modo A' : 'Modo B'}
+                    </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="margemLucro"
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={margemLucro}
-                      onChange={(e) => setMargemLucro(parseFloat(e.target.value) || 0)}
-                      className="bg-slate-900 border-slate-700 text-white text-sm font-bold h-9"
-                    />
-                    <span className="text-xs font-bold text-slate-400 px-1">%</span>
-                  </div>
-
-                  {/* Opções rápidas de margem: 25%, 30%, 35%, 40%, 45%, 50% */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
-                      <span>Opções rápidas de margem:</span>
-                    </div>
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                      {[25, 30, 35, 40, 45, 50].map((opcao) => (
-                        <Button
-                          key={opcao}
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setMargemLucro(opcao)}
-                          className={`h-8 px-1 text-xs font-bold transition-all ${
-                            margemLucro === opcao
-                              ? 'bg-sky-600 text-white border-sky-400 shadow-sm shadow-sky-600/50 hover:bg-sky-500'
-                              : 'bg-slate-850 bg-slate-900/90 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setModoPrecificacao('margem')}
+                      className={`p-2.5 rounded-lg border text-left transition-all ${
+                        modoPrecificacao === 'margem'
+                          ? 'bg-sky-900/90 border-sky-400 text-white shadow-md shadow-sky-950 ring-1 ring-sky-400'
+                          : 'bg-slate-900/70 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <div className="font-bold text-xs flex items-center gap-1.5">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            modoPrecificacao === 'margem' ? 'bg-sky-400' : 'bg-slate-600'
                           }`}
-                        >
-                          {opcao}%
-                        </Button>
-                      ))}
-                    </div>
+                        />
+                        Margem Desejada
+                      </div>
+                      <p className="text-[10px] opacity-80 mt-1 leading-tight">
+                        Custo × (1 + margem %)
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setModoPrecificacao('desconto_mercado')}
+                      className={`p-2.5 rounded-lg border text-left transition-all ${
+                        modoPrecificacao === 'desconto_mercado'
+                          ? 'bg-amber-950/90 border-amber-400 text-white shadow-md shadow-amber-950 ring-1 ring-amber-400'
+                          : 'bg-slate-900/70 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <div className="font-bold text-xs flex items-center gap-1.5">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            modoPrecificacao === 'desconto_mercado'
+                              ? 'bg-amber-400'
+                              : 'bg-slate-600'
+                          }`}
+                        />
+                        Desconto Mercado
+                      </div>
+                      <p className="text-[10px] opacity-80 mt-1 leading-tight">
+                        Mercado × (1 − desconto %)
+                      </p>
+                    </button>
                   </div>
                 </div>
 
-                {/* Desconto e Taxas */}
+                {/* 2. CAMPOS DO MODO SELECIONADO */}
+                {modoPrecificacao === 'margem' ? (
+                  /* MODO A: Margem Desejada */
+                  <div className="space-y-2.5 bg-sky-950/40 p-3.5 rounded-xl border border-sky-700/60">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="margemLucro"
+                        className="text-xs font-bold text-sky-300 flex items-center gap-1"
+                      >
+                        <Percent className="w-3.5 h-3.5 text-sky-400" /> Margem Desejada (%)
+                      </Label>
+                      <span className="text-sm font-black text-sky-400">{margemLucro}%</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="margemLucro"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={margemLucro}
+                        onChange={(e) => setMargemLucro(parseFloat(e.target.value) || 0)}
+                        className="bg-slate-900 border-slate-700 text-white text-sm font-bold h-9"
+                      />
+                      <span className="text-xs font-bold text-slate-400 px-1">%</span>
+                    </div>
+
+                    {/* Atalhos rápidos de margem */}
+                    <div className="space-y-1 pt-1">
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        Atalhos de margem desejada:
+                      </span>
+                      <div className="grid grid-cols-6 gap-1">
+                        {[25, 30, 35, 40, 45, 50].map((opcao) => (
+                          <Button
+                            key={opcao}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setMargemLucro(opcao)}
+                            className={`h-7 px-1 text-[11px] font-bold transition-all ${
+                              margemLucro === opcao
+                                ? 'bg-sky-600 text-white border-sky-400 shadow-sm hover:bg-sky-500'
+                                : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                            }`}
+                          >
+                            {opcao}%
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Campo opcional de preço de mercado no Modo A (apenas para vantagem comercial) */}
+                    <div className="pt-2 border-t border-sky-900/60 space-y-1">
+                      <Label
+                        htmlFor="precoMercadoModoA"
+                        className="text-[11px] text-slate-400 font-medium flex items-center justify-between"
+                      >
+                        <span>Preço de Mercado ({moeda}) - Opcional</span>
+                        <span className="text-[10px] text-sky-400">Só para mostrar economia</span>
+                      </Label>
+                      <Input
+                        id="precoMercadoModoA"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Ex: 5500.00"
+                        value={precoMercado !== undefined ? precoMercado : ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setPrecoMercado(val === '' ? undefined : parseFloat(val))
+                        }}
+                        className="bg-slate-900 border-slate-700 text-white text-xs h-8"
+                      />
+                      <span className="text-[10px] text-slate-500 block leading-tight">
+                        No Modo A, o mercado NÃO altera o preço final, serve apenas para exibir
+                        vantagem no PDF.
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  /* MODO B: Desconto sobre Preço de Mercado */
+                  <div className="space-y-3 bg-amber-950/40 p-3.5 rounded-xl border border-amber-600/60">
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="precoMercadoModoB"
+                        className="text-xs font-bold text-amber-300 flex items-center justify-between"
+                      >
+                        <span className="flex items-center gap-1">
+                          <DollarSign className="w-3.5 h-3.5 text-amber-400" /> Preço de Mercado (
+                          {moeda}) *
+                        </span>
+                        <span className="text-[10px] bg-amber-900/80 text-amber-200 px-1.5 py-0.5 rounded border border-amber-700 font-semibold">
+                          Obrigatório Modo B
+                        </span>
+                      </Label>
+                      <Input
+                        id="precoMercadoModoB"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        required={modoPrecificacao === 'desconto_mercado'}
+                        placeholder="Ex: 6000.00"
+                        value={precoMercado !== undefined ? precoMercado : ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setPrecoMercado(val === '' ? undefined : parseFloat(val))
+                        }}
+                        className="bg-slate-900 border-amber-500/60 focus:border-amber-400 text-white text-sm font-bold h-9"
+                      />
+                      <span className="text-[10px] text-amber-300/80 block leading-tight">
+                        Preço de referência do concorrente ou valor cheio de balcão.
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between">
+                        <Label
+                          htmlFor="descontoMercadoPercentual"
+                          className="text-xs font-bold text-amber-300 flex items-center gap-1"
+                        >
+                          <Percent className="w-3.5 h-3.5 text-amber-400" /> Desconto % que vou dar
+                          *
+                        </Label>
+                        <span className="text-sm font-black text-amber-400">
+                          {descontoMercadoPercentual}% OFF
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="descontoMercadoPercentual"
+                          type="number"
+                          min="0"
+                          max="90"
+                          step="0.5"
+                          value={descontoMercadoPercentual}
+                          onChange={(e) =>
+                            setDescontoMercadoPercentual(parseFloat(e.target.value) || 0)
+                          }
+                          className="bg-slate-900 border-amber-500/60 text-white text-sm font-bold h-9"
+                        />
+                        <span className="text-xs font-bold text-amber-400 px-1">%</span>
+                      </div>
+
+                      {/* Atalhos rápidos de desconto de mercado */}
+                      <div className="grid grid-cols-5 gap-1 pt-1">
+                        {[5, 8, 10, 12, 15].map((desc) => (
+                          <Button
+                            key={desc}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDescontoMercadoPercentual(desc)}
+                            className={`h-7 px-1 text-[11px] font-bold transition-all ${
+                              descontoMercadoPercentual === desc
+                                ? 'bg-amber-600 text-white border-amber-400 shadow-sm hover:bg-amber-500'
+                                : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                            }`}
+                          >
+                            {desc}%
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Desconto adicional em R$ e Taxas */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label
@@ -985,7 +1218,7 @@ export function FormCotacao({
 
                   <div className="space-y-1">
                     <Label htmlFor="desconto" className="text-[11px] text-slate-400 font-semibold">
-                      Desconto Aplicado (-)
+                      Desconto Avulso R$ (-)
                     </Label>
                     <Input
                       id="desconto"
@@ -999,153 +1232,144 @@ export function FormCotacao({
                   </div>
                 </div>
 
-                {/* SEÇÃO DE SIMULAÇÃO DE DESCONTO */}
+                {/* 3. CARDS COMPARATIVOS LADO A LADO: MODO A vs MODO B (TELA DE DECISÃO INTERNA DO DONO) */}
                 <div className="pt-2 border-t border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Simulação de Desconto</span>
+                      <span>Decisão Interna (Modo A vs Modo B)</span>
                     </div>
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                      Visão do Dono
+                      Comparativo
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="space-y-1">
-                      <Label
-                        htmlFor="precoMercado"
-                        className="text-[11px] text-slate-300 font-medium flex items-center justify-between"
-                      >
-                        <span>Preço Mercado ({moeda})</span>
-                      </Label>
-                      <Input
-                        id="precoMercado"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="Ex: 5200.00"
-                        value={precoMercado !== undefined ? precoMercado : ''}
-                        onChange={(e) => {
-                          const val = e.target.value
-                          setPrecoMercado(val === '' ? undefined : parseFloat(val))
-                        }}
-                        className="bg-slate-900 border-amber-500/40 focus:border-amber-400 text-white text-xs h-8"
-                      />
-                      <span className="text-[10px] text-slate-400 block leading-tight">
-                        Referência concorrente
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label
-                        htmlFor="margemMinimaAceitavel"
-                        className="text-[11px] text-slate-300 font-medium flex items-center justify-between"
-                      >
-                        <span>Margem Mín. Líquida (%)</span>
-                      </Label>
-                      <Input
-                        id="margemMinimaAceitavel"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.5"
-                        placeholder="10"
-                        value={margemMinimaAceitavel}
-                        onChange={(e) => setMargemMinimaAceitavel(parseFloat(e.target.value) || 0)}
-                        className="bg-slate-900 border-amber-500/40 focus:border-amber-400 text-white text-xs h-8 font-bold text-amber-300"
-                      />
-                      <span className="text-[10px] text-slate-400 block leading-tight">
-                        Menor margem aceita
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Breakdown detalhado da Simulação */}
-                  <div className="bg-slate-950/80 border border-amber-500/30 rounded-lg p-3 space-y-2 text-xs">
-                    {/* Preço Cheio */}
-                    <div className="flex justify-between items-center text-slate-300">
-                      <span className="text-[11px]">Preço de Venda Cheio:</span>
-                      <span className="font-bold text-slate-100">
-                        {formatarMoeda(simulacao.precoVendaCheio, moeda)}
-                      </span>
-                    </div>
-
-                    {/* Lucro e Margem Cheia */}
-                    <div className="flex justify-between items-center text-slate-400 text-[11px]">
-                      <span>Lucro Líquido Cheio:</span>
-                      <span className="text-emerald-400 font-medium">
-                        {formatarMoeda(simulacao.lucroLiquidoCheio, moeda)} (
-                        {simulacao.margemLiquidaCheiaPercent.toFixed(1)}% líq.)
-                      </span>
-                    </div>
-
-                    <div className="border-t border-slate-800 pt-2 space-y-1.5">
-                      {/* Desconto Máximo */}
-                      <div className="flex justify-between items-center text-amber-300">
-                        <span className="text-[11px] font-semibold">
-                          Desconto Máximo Aceitável:
-                        </span>
-                        <span className="font-black text-amber-400">
-                          {formatarMoeda(simulacao.descontoMaximoReais, moeda)} (
-                          {simulacao.descontoMaximoPercent.toFixed(1)}%)
-                        </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* CARD MODO A */}
+                    <div
+                      onClick={() => setModoPrecificacao('margem')}
+                      className={`cursor-pointer rounded-xl p-3 space-y-2 border transition-all ${
+                        modoPrecificacao === 'margem'
+                          ? 'bg-sky-950/70 border-sky-400 ring-2 ring-sky-500/40 shadow-md'
+                          : 'bg-slate-950/40 border-slate-800 opacity-60 hover:opacity-90 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              modoPrecificacao === 'margem'
+                                ? 'bg-sky-400 animate-pulse'
+                                : 'bg-slate-600'
+                            }`}
+                          />
+                          <span className="font-bold text-xs text-white">Modo A: Margem</span>
+                        </div>
+                        {modoPrecificacao === 'margem' && (
+                          <span className="text-[9px] font-black uppercase tracking-wider bg-sky-500 text-white px-1.5 py-0.5 rounded">
+                            Ativo
+                          </span>
+                        )}
                       </div>
 
-                      {/* Preço Final Mínimo */}
-                      <div className="flex justify-between items-center text-slate-200">
-                        <span className="text-[11px] font-semibold">
-                          Preço Final Mínimo com Desc.:
-                        </span>
-                        <span className="font-extrabold text-white text-sm bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded">
-                          {formatarMoeda(simulacao.precoFinalMinimo, moeda)}
-                        </span>
-                      </div>
-
-                      {/* Imposto Pago nesse cenário */}
-                      <div className="flex justify-between items-center text-rose-300/80 text-[11px]">
-                        <span>Imposto Pago no Cenário Mínimo ({impostoAliquota}%):</span>
-                        <span className="font-medium">
-                          {formatarMoeda(simulacao.impostoPagoCenarioMinimo, moeda)}
-                        </span>
-                      </div>
-
-                      {/* Margem Líquida Final */}
-                      <div className="flex justify-between items-center text-emerald-300 text-[11px]">
-                        <span>Margem Líquida Final Garantida:</span>
-                        <span className="font-bold text-emerald-400">
-                          {simulacao.margemLiquidaFinalPercent.toFixed(1)}% (
-                          {formatarMoeda(simulacao.lucroLiquidoMinimo, moeda)})
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Comparativo de Mercado */}
-                    {precoMercado !== undefined && precoMercado > 0 ? (
-                      <div className="border-t border-slate-800 pt-2 space-y-1 bg-emerald-950/30 -mx-3 -mb-3 p-3 rounded-b-lg border-emerald-900/40">
-                        <div className="flex justify-between items-center text-[11px] text-emerald-300">
-                          <span className="font-semibold">Economia p/ Cliente vs. Mercado:</span>
-                          <span className="font-black text-emerald-400 text-sm">
-                            {formatarMoeda(simulacao.economiaClienteReais, moeda)}
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between items-center text-slate-300">
+                          <span className="text-[11px]">Preço Final:</span>
+                          <span className="font-extrabold text-white text-sm">
+                            {formatarMoeda(cenarioA.precoFinal, moeda)}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center text-[10px] text-emerald-200/80">
-                          <span>% Economia sobre o Mercado:</span>
-                          <span className="font-extrabold text-emerald-300">
-                            {simulacao.percentualEconomiaMercado.toFixed(1)}% mais barato
+                        <div className="flex justify-between items-center text-emerald-400 text-[11px]">
+                          <span>Margem Desejada:</span>
+                          <span className="font-bold">{cenarioA.margemRealPercent}%</span>
+                        </div>
+                        <div className="flex justify-between items-center text-emerald-300 text-[11px]">
+                          <span>Lucro Líq. ({impostoAliquota}% imp):</span>
+                          <span className="font-semibold">
+                            {formatarMoeda(cenarioA.lucroLiquido, moeda)} (
+                            {cenarioA.margemLiquidaPercent.toFixed(1)}%)
                           </span>
                         </div>
+                        {cenarioA.temEconomia && (
+                          <div className="pt-1 border-t border-slate-800/80 flex justify-between text-[10px] text-sky-300">
+                            <span>Economia p/ cliente:</span>
+                            <span className="font-bold">
+                              {formatarMoeda(cenarioA.economiaClienteReais, moeda)}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="border-t border-slate-800 pt-1 text-[10px] text-slate-400 italic text-center">
-                        Preencha o preço de mercado para comparar a economia do cliente
+                    </div>
+
+                    {/* CARD MODO B */}
+                    <div
+                      onClick={() => setModoPrecificacao('desconto_mercado')}
+                      className={`cursor-pointer rounded-xl p-3 space-y-2 border transition-all ${
+                        modoPrecificacao === 'desconto_mercado'
+                          ? 'bg-amber-950/70 border-amber-400 ring-2 ring-amber-500/40 shadow-md'
+                          : 'bg-slate-950/40 border-slate-800 opacity-60 hover:opacity-90 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              modoPrecificacao === 'desconto_mercado'
+                                ? 'bg-amber-400 animate-pulse'
+                                : 'bg-slate-600'
+                            }`}
+                          />
+                          <span className="font-bold text-xs text-white">Modo B: Desconto</span>
+                        </div>
+                        {modoPrecificacao === 'desconto_mercado' && (
+                          <span className="text-[9px] font-black uppercase tracking-wider bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded">
+                            Ativo
+                          </span>
+                        )}
                       </div>
-                    )}
+
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between items-center text-slate-300">
+                          <span className="text-[11px]">Preço Final:</span>
+                          <span className="font-extrabold text-white text-sm">
+                            {cenarioB.valido
+                              ? formatarMoeda(cenarioB.precoFinal, moeda)
+                              : 'Informe mercado'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-amber-300 text-[11px]">
+                          <span>Desconto Dado:</span>
+                          <span className="font-bold">{descontoMercadoPercentual}% OFF</span>
+                        </div>
+                        <div className="flex justify-between items-center text-emerald-300 text-[11px]">
+                          <span>Margem Real Resultante:</span>
+                          <span className="font-extrabold text-emerald-400">
+                            {cenarioB.valido
+                              ? `${cenarioB.margemRealResultantePercent.toFixed(1)}%`
+                              : '-'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-slate-400 text-[10px]">
+                          <span>Lucro Líq. ({impostoAliquota}% imp):</span>
+                          <span>
+                            {cenarioB.valido ? formatarMoeda(cenarioB.lucroLiquido, moeda) : '-'}
+                          </span>
+                        </div>
+                        {cenarioB.valido && (
+                          <div className="pt-1 border-t border-slate-800/80 flex justify-between text-[10px] text-amber-300">
+                            <span>Economia no PDF:</span>
+                            <span className="font-bold">
+                              {formatarMoeda(cenarioB.economiaClienteReais, moeda)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-                {/* Resumo Financeiro Breakdown */}
+
+                {/* 4. RESUMO FINANCEIRO FINAL DA PROPOSTA */}
                 <div className="pt-3 border-t border-slate-800 space-y-2 text-xs">
-                  {/* 1. Subtotal (Custo dos Serviços) */}
                   <div className="flex justify-between text-slate-300">
                     <span>Subtotal (Custo dos Serviços):</span>
                     <span className="font-semibold text-slate-100">
@@ -1153,41 +1377,39 @@ export function FormCotacao({
                     </span>
                   </div>
 
-                  {/* 2. Margem (%) */}
                   <div className="flex justify-between text-slate-400 text-[11px]">
-                    <span>Margem Aplicada:</span>
-                    <span className="font-medium text-sky-400">{margemLucro}%</span>
+                    <span>Modo Efetivo de Venda:</span>
+                    <span className="font-medium text-sky-400">
+                      {modoPrecificacao === 'margem'
+                        ? `Modo A (Margem ${margemLucro}%)`
+                        : `Modo B (Desconto ${descontoMercadoPercentual}% sobre Mercado)`}
+                    </span>
                   </div>
 
-                  {/* 3. Lucro Bruto (= subtotal * margem%) */}
                   <div className="flex justify-between text-emerald-400 font-medium">
-                    <span>Lucro Bruto ({margemLucro}%):</span>
+                    <span>Lucro Bruto Estimado:</span>
                     <span className="font-bold">
                       + {formatarMoeda(totais.valorMargemLucro, moeda)}
                     </span>
                   </div>
 
-                  {/* 4. Imposto (Y% sobre o lucro) */}
                   <div className="flex justify-between text-rose-300/90 text-xs">
-                    <span className="flex items-center gap-1">
-                      Imposto ({totais.aliquotaImpostoLucro}% sobre o lucro):
-                    </span>
+                    <span>Imposto ({totais.aliquotaImpostoLucro}% sobre o lucro):</span>
                     <span className="font-semibold">
                       - {formatarMoeda(totais.valorImpostoLucro, moeda)}
                     </span>
                   </div>
 
-                  {/* 5. Lucro Líquido (= lucro bruto - imposto) */}
                   <div className="flex justify-between text-emerald-300 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1.5 rounded-md font-semibold">
                     <span className="text-emerald-300 flex items-center gap-1 font-bold">
                       Lucro Líquido Real:
                     </span>
                     <span className="font-extrabold text-emerald-200">
-                      {formatarMoeda(totais.valorLucroLiquido, moeda)}
+                      {formatarMoeda(totais.valorLucroLiquido, moeda)} (
+                      {totais.margemLiquidaEfetivaPercent.toFixed(1)}% líq.)
                     </span>
                   </div>
 
-                  {/* 6. Taxas Adicionais */}
                   {taxasAdicionais > 0 && (
                     <div className="flex justify-between text-slate-300 pt-1">
                       <span>Taxas Adicionais:</span>
@@ -1197,26 +1419,25 @@ export function FormCotacao({
                     </div>
                   )}
 
-                  {/* 7. Descontos */}
                   {desconto > 0 && (
                     <div className="flex justify-between text-amber-400 pt-1">
-                      <span>Descontos:</span>
+                      <span>Desconto Avulso:</span>
                       <span className="font-medium">- {formatarMoeda(desconto, moeda)}</span>
                     </div>
                   )}
 
-                  {/* 8. Total Final & 9. Valor por passageiro adulto */}
+                  {/* Total Final da Proposta */}
                   <div className="pt-3 mt-3 border-t-2 border-sky-500/50 bg-sky-950/40 p-3 rounded-lg flex flex-col gap-1">
                     <div className="flex items-center justify-between">
                       <span className="text-xs uppercase font-extrabold tracking-wider text-sky-300">
-                        Total Final de Venda
+                        Total da Proposta (PDF)
                       </span>
                       <span className="text-xl font-black text-white">
                         {formatarMoeda(totais.valorFinalVenda, moeda)}
                       </span>
                     </div>
                     <div className="flex justify-between text-[11px] text-slate-400 pt-1 border-t border-sky-900/60 mt-1">
-                      <span>Valor por passageiro adulto ({numPassageiros}x):</span>
+                      <span>Por passageiro adulto ({numPassageiros}x):</span>
                       <span className="font-bold text-sky-300">
                         {formatarMoeda(totais.valorPorPessoa, moeda)}
                       </span>

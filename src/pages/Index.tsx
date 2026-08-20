@@ -175,7 +175,9 @@ export default function Index() {
       num_criancas: 0,
       status: 'rascunho',
       servicos: [],
+      modo_precificacao: 'margem',
       margem_lucro: configAgencia.margem_padrao || 15,
+      desconto_mercado_percentual: 10,
       desconto: 0,
       taxas_adicionais: 0,
       moeda: 'BRL',
@@ -616,18 +618,34 @@ export default function Index() {
                       </div>
 
                       {/* Middle: Financial Info */}
-                      <div className="flex flex-row lg:flex-col justify-between lg:justify-center items-start lg:items-end border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100 lg:min-w-[190px]">
+                      <div className="flex flex-row lg:flex-col justify-between lg:justify-center items-start lg:items-end border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100 lg:min-w-[210px]">
                         <div className="text-left lg:text-right">
-                          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">
-                            Total da Proposta
-                          </span>
-                          <span className="text-xl font-black text-slate-950">
+                          <div className="flex items-center gap-1 lg:justify-end">
+                            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">
+                              Total da Proposta
+                            </span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                              {cotacao.modo_precificacao === 'desconto_mercado'
+                                ? 'Modo B (Desc. Mercado)'
+                                : 'Modo A (Margem)'}
+                            </span>
+                          </div>
+                          <span className="text-xl font-black text-slate-950 block">
                             {formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}
                           </span>
                         </div>
                         <div className="text-right text-[11px] text-emerald-700 font-semibold mt-0.5">
-                          Margem: {cotacao.margem_lucro}% (+
-                          {formatarMoeda(cotacao.valor_lucro, cotacao.moeda)})
+                          {cotacao.modo_precificacao === 'desconto_mercado' ? (
+                            <span>
+                              {cotacao.desconto_mercado_percentual || 0}% OFF mercado (+
+                              {formatarMoeda(cotacao.valor_lucro, cotacao.moeda)})
+                            </span>
+                          ) : (
+                            <span>
+                              Margem: {cotacao.margem_lucro}% (+
+                              {formatarMoeda(cotacao.valor_lucro, cotacao.moeda)})
+                            </span>
+                          )}
                         </div>
                       </div>
 

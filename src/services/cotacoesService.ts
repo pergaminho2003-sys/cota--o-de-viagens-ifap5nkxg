@@ -30,7 +30,14 @@ function mapRecordToCotacao(record: Record<string, unknown>): Cotacao {
     num_criancas: Number(record.num_criancas) || 0,
     status: (record.status as Cotacao['status']) || 'rascunho',
     servicos: parseServicos(record.servicos),
+    modo_precificacao: (record.modo_precificacao as Cotacao['modo_precificacao']) || 'margem',
     margem_lucro: Number(record.margem_lucro) || 0,
+    desconto_mercado_percentual:
+      record.desconto_mercado_percentual !== undefined &&
+      record.desconto_mercado_percentual !== null &&
+      record.desconto_mercado_percentual !== ''
+        ? Number(record.desconto_mercado_percentual)
+        : undefined,
     desconto: Number(record.desconto) || 0,
     taxas_adicionais: Number(record.taxas_adicionais) || 0,
     moeda: (record.moeda as Cotacao['moeda']) || 'BRL',

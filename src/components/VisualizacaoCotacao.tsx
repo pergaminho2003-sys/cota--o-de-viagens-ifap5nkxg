@@ -9,7 +9,7 @@ import {
   formatarMoeda,
   formatarData,
   calcularDuracaoDias,
-  calcularSimulacaoDesconto,
+  calcularTotaisCotacao,
 } from '@/lib/calculos'
 import { imprimirOuSalvarPDF } from '@/lib/geradorDocumento'
 import { Button } from '@/components/ui/button'
@@ -53,19 +53,23 @@ export function VisualizacaoCotacao({
   const impostoAliquota =
     configAgencia.imposto_lucro_padrao !== undefined ? configAgencia.imposto_lucro_padrao : 6
 
-  const simulacao = calcularSimulacaoDesconto({
-    custoTotal: cotacao.valor_custo_total,
-    markupPercent: cotacao.margem_lucro,
-    impostoPercent: impostoAliquota,
+  const totais = calcularTotaisCotacao({
+    servicos: cotacao.servicos || [],
+    modoPrecificacao: cotacao.modo_precificacao || 'margem',
+    margemLucroPercent: cotacao.margem_lucro,
+    descontoMercadoPercent: cotacao.desconto_mercado_percentual,
     precoMercado: cotacao.preco_mercado,
-    margemMinimaAceitavelPercent: cotacao.margem_minima_aceitavel,
+    desconto: cotacao.desconto || 0,
+    taxasAdicionais: cotacao.taxas_adicionais || 0,
+    numPassageiros: cotacao.num_passageiros || 1,
+    impostoLucroPercent: impostoAliquota,
   })
 
   const temComparativoMercado =
     cotacao.preco_mercado !== undefined &&
     cotacao.preco_mercado !== null &&
     cotacao.preco_mercado > 0 &&
-    simulacao.possuiSimulacaoValida
+    totais.economiaClienteReais > 0
 
   const statusConfig = STATUS_COTACAO_CONFIG[cotacao.status] || STATUS_COTACAO_CONFIG.rascunho
 
@@ -343,10 +347,10 @@ Qualquer dúvida estamos à disposição!`
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-black text-emerald-900 uppercase tracking-wider">
                   <Sparkles className="w-4 h-4 text-emerald-600" />
-                  <span>Vantagem Comercial Exclusiva</span>
+                  <span>Vantagem Comercial / Economia Garantida</span>
                 </div>
                 <span className="bg-emerald-600 text-white font-extrabold text-[11px] px-2.5 py-0.5 rounded-full shadow-sm">
-                  Economia de {simulacao.percentualEconomiaMercado.toFixed(0)}%
+                  {totais.economiaClientePercent.toFixed(0)}% OFF
                 </span>
               </div>
 
@@ -356,7 +360,7 @@ Qualquer dúvida estamos à disposição!`
                     Preço de Mercado de Referência:
                   </span>
                   <span className="text-sm font-bold text-slate-500 line-through">
-                    {formatarMoeda(simulacao.precoMercado, cotacao.moeda)}
+                    {formatarMoeda(cotacao.preco_mercado, cotacao.moeda)}
                   </span>
                 </div>
 
@@ -365,15 +369,15 @@ Qualquer dúvida estamos à disposição!`
                     Sua Economia Garantida:
                   </span>
                   <span className="text-lg font-black text-emerald-700">
-                    {formatarMoeda(simulacao.economiaClienteReais, cotacao.moeda)}
+                    {formatarMoeda(totais.economiaClienteReais, cotacao.moeda)}
                   </span>
                 </div>
               </div>
 
               <div className="pt-2 border-t border-emerald-200/80 flex items-center justify-between text-xs font-semibold text-emerald-900">
-                <span>Preço Especial Oportunidade:</span>
+                <span>Investimento Especial da Proposta:</span>
                 <span className="font-extrabold text-emerald-800">
-                  {formatarMoeda(simulacao.precoFinalMinimo, cotacao.moeda)}
+                  {formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}
                 </span>
               </div>
             </div>

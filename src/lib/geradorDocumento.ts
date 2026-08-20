@@ -1,10 +1,5 @@
 import { Cotacao, ConfiguracoesAgencia, CATEGORIAS_SERVICO } from '@/types/cotacao'
-import {
-  formatarMoeda,
-  formatarData,
-  calcularDuracaoDias,
-  calcularSimulacaoDesconto,
-} from './calculos'
+import { formatarMoeda, formatarData, calcularDuracaoDias, calcularTotaisCotacao } from './calculos'
 
 export function gerarHTMLDocumentoProposta(
   cotacao: Cotacao,
@@ -17,19 +12,25 @@ export function gerarHTMLDocumentoProposta(
   const impostoAliquota =
     agencia.imposto_lucro_padrao !== undefined ? agencia.imposto_lucro_padrao : 6
 
-  const simulacao = calcularSimulacaoDesconto({
-    custoTotal: cotacao.valor_custo_total,
-    markupPercent: cotacao.margem_lucro,
-    impostoPercent: impostoAliquota,
+  const totais = calcularTotaisCotacao({
+    servicos: cotacao.servicos || [],
+    modoPrecificacao: cotacao.modo_precificacao || 'margem',
+    margemLucroPercent: cotacao.margem_lucro,
+    descontoMercadoPercent: cotacao.desconto_mercado_percentual,
     precoMercado: cotacao.preco_mercado,
-    margemMinimaAceitavelPercent: cotacao.margem_minima_aceitavel,
+    desconto: cotacao.desconto || 0,
+    taxasAdicionais: cotacao.taxas_adicionais || 0,
+    numPassageiros: cotacao.num_passageiros || 1,
+    impostoLucroPercent: impostoAliquota,
   })
 
-  const temComparativoMercado =
+  // Vantagem Comercial / Economia Garantida no PDF:
+  // Só aparece se houver preço de mercado informado e economia > 0
+  const temVantagemComercial =
     cotacao.preco_mercado !== undefined &&
     cotacao.preco_mercado !== null &&
     cotacao.preco_mercado > 0 &&
-    simulacao.possuiSimulacaoValida
+    totais.economiaClienteReais > 0
 
   const servicosPorCategoria = cotacao.servicos.reduce(
     (acc, item) => {
@@ -335,28 +336,28 @@ export function gerarHTMLDocumentoProposta(
     <!-- Resumo do Investimento & Economia -->
     <div style="display: flex; justify-content: flex-end; gap: 16px; margin-bottom: 20px; align-items: stretch;">
       ${
-        temComparativoMercado
+        temVantagemComercial
           ? `
       <div style="flex: 1; background: #ecfdf5; border: 1.5px solid #6ee7b7; border-radius: 8px; padding: 14px 18px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <span style="font-size: 11px; font-weight: 800; color: #065f46; text-transform: uppercase; letter-spacing: 0.5px;">
-            ✨ Vantagem Comercial Exclusiva
+            ✨ Vantagem Comercial / Economia Garantida
           </span>
           <span style="background: #059669; color: #ffffff; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 9999px;">
-            Economia de ${simulacao.percentualEconomiaMercado.toFixed(0)}%
+            ${totais.economiaClientePercent.toFixed(0)}% OFF
           </span>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569; margin-bottom: 4px;">
-          <span>Preço de Mercado Concorrente:</span>
-          <span style="text-decoration: line-through; font-weight: 600;">${formatarMoeda(simulacao.precoMercado, cotacao.moeda)}</span>
+          <span>Preço de Mercado de Referência:</span>
+          <span style="text-decoration: line-through; font-weight: 600;">${formatarMoeda(cotacao.preco_mercado, cotacao.moeda)}</span>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 12.5px; color: #047857; font-weight: 700; margin-bottom: 6px;">
           <span>Sua Economia Garantida:</span>
-          <span style="font-size: 14px; font-weight: 800;">${formatarMoeda(simulacao.economiaClienteReais, cotacao.moeda)}</span>
+          <span style="font-size: 14px; font-weight: 800;">${formatarMoeda(totais.economiaClienteReais, cotacao.moeda)}</span>
         </div>
         <div style="border-top: 1px dashed #a7f3d0; padding-top: 6px; display: flex; justify-content: space-between; font-size: 12px; color: #065f46; font-weight: 700;">
-          <span>Preço Especial Oportunidade:</span>
-          <span style="font-weight: 800;">${formatarMoeda(simulacao.precoFinalMinimo, cotacao.moeda)}</span>
+          <span>Investimento Especial da Proposta:</span>
+          <span style="font-weight: 800;">${formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}</span>
         </div>
       </div>
       `

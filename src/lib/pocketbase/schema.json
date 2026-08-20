@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T06:18:51.757Z",
+  "generatedAt": "2026-08-20T06:39:08.288Z",
   "collections": [
     {
       "name": "users",
@@ -229,6 +229,19 @@
         },
         {
           "name": "margem_minima_aceitavel",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "modo_precificacao",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["margem", "desconto_mercado"]
+        },
+        {
+          "name": "desconto_mercado_percentual",
           "type": "number",
           "required": false,
           "system": false

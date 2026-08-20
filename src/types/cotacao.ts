@@ -26,6 +26,8 @@ export type StatusCotacao = 'rascunho' | 'enviada' | 'aprovada' | 'recusada' | '
 
 export type Moeda = 'BRL' | 'USD' | 'EUR'
 
+export type ModoPrecificacao = 'margem' | 'desconto_mercado'
+
 export interface Cotacao {
   id?: string
   codigo: string
@@ -40,7 +42,9 @@ export interface Cotacao {
   num_criancas: number
   status: StatusCotacao
   servicos: ServicoItem[]
-  margem_lucro: number // em porcentagem, e.g. 15%
+  modo_precificacao?: ModoPrecificacao // 'margem' (Modo A) ou 'desconto_mercado' (Modo B)
+  margem_lucro: number // em porcentagem, e.g. 15% (Modo A)
+  desconto_mercado_percentual?: number // desconto % que vou dar sobre o preço de mercado (Modo B)
   desconto: number
   taxas_adicionais: number
   moeda: Moeda
