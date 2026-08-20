@@ -1,0 +1,1063 @@
+import React, { useState, useEffect, useMemo } from 'react'
+import {
+  Cotacao,
+  ServicoItem,
+  ServicoCategoria,
+  CATEGORIAS_SERVICO,
+  ConfiguracoesAgencia,
+  StatusCotacao,
+  Moeda,
+} from '@/types/cotacao'
+import { calcularTotaisCotacao, formatarMoeda } from '@/lib/calculos'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Plane,
+  Hotel,
+  Car,
+  Compass,
+  ShieldCheck,
+  KeySquare,
+  Ship,
+  Train,
+  FileText,
+  Package,
+  Plus,
+  Trash2,
+  DollarSign,
+  TrendingUp,
+  Percent,
+  Calendar,
+  Users,
+  Eye,
+  Save,
+  ArrowLeft,
+  Sparkles,
+  HelpCircle,
+  Copy,
+} from 'lucide-react'
+import { toast } from 'sonner'
+
+interface FormCotacaoProps {
+  cotacaoInicial?: Cotacao | null
+  configAgencia: ConfiguracoesAgencia
+  onSalvar: (dados: Omit<Cotacao, 'id' | 'created' | 'updated'>, id?: string) => Promise<void>
+  onCancelar: () => void
+  onVisualizar: (cotacao: Cotacao) => void
+  salvando?: boolean
+}
+
+export function FormCotacao({
+  cotacaoInicial,
+  configAgencia,
+  onSalvar,
+  onCancelar,
+  onVisualizar,
+  salvando = false,
+}: FormCotacaoProps) {
+  // Main form state
+  const [codigo, setCodigo] = useState(cotacaoInicial?.codigo || '')
+  const [clienteNome, setClienteNome] = useState(cotacaoInicial?.cliente_nome || '')
+  const [clienteEmail, setClienteEmail] = useState(cotacaoInicial?.cliente_email || '')
+  const [clienteTelefone, setClienteTelefone] = useState(cotacaoInicial?.cliente_telefone || '')
+  const [clienteCpfPassaporte, setClienteCpfPassaporte] = useState(
+    cotacaoInicial?.cliente_cpf_passaporte || '',
+  )
+
+  const [destino, setDestino] = useState(cotacaoInicial?.destino || '')
+  const [dataIda, setDataIda] = useState(cotacaoInicial?.data_ida || '')
+  const [dataVolta, setDataVolta] = useState(cotacaoInicial?.data_volta || '')
+  const [numPassageiros, setNumPassageiros] = useState<number>(cotacaoInicial?.num_passageiros ?? 2)
+  const [numCriancas, setNumCriancas] = useState<number>(cotacaoInicial?.num_criancas ?? 0)
+  const [status, setStatus] = useState<StatusCotacao>(cotacaoInicial?.status || 'rascunho')
+
+  // Services
+  const [servicos, setServicos] = useState<ServicoItem[]>(cotacaoInicial?.servicos || [])
+
+  // Pricing
+  const [margemLucro, setMargemLucro] = useState<number>(
+    cotacaoInicial?.margem_lucro !== undefined
+      ? cotacaoInicial.margem_lucro
+      : (configAgencia.margem_padrao ?? 15),
+  )
+  const [desconto, setDesconto] = useState<number>(cotacaoInicial?.desconto ?? 0)
+  const [taxasAdicionais, setTaxasAdicionais] = useState<number>(
+    cotacaoInicial?.taxas_adicionais ?? 0,
+  )
+  const [moeda, setMoeda] = useState<Moeda>(cotacaoInicial?.moeda || 'BRL')
+  const [cotacaoMoeda, setCotacaoMoeda] = useState<number>(cotacaoInicial?.cotacao_moeda ?? 1)
+
+  // Terms & Conditions
+  const [observacoes, setObservacoes] = useState(cotacaoInicial?.observacoes || '')
+  const [condicoesGerais, setCondicoesGerais] = useState(
+    cotacaoInicial?.condicoes_gerais || configAgencia.condicoes_padrao || '',
+  )
+  const [formasPagamento, setFormasPagamento] = useState(
+    cotacaoInicial?.formas_pagamento || configAgencia.formas_pagamento_padrao || '',
+  )
+  const [validadeDias, setValidadeDias] = useState<number>(
+    cotacaoInicial?.validade_dias || configAgencia.validade_padrao_dias || 7,
+  )
+  const [dataValidade, setDataValidade] = useState(cotacaoInicial?.data_validade || '')
+
+  // Calculation engine
+  const totais = useMemo(() => {
+    return calcularTotaisCotacao({
+      servicos,
+      margemLucroPercent: margemLucro,
+      desconto,
+      taxasAdicionais,
+      numPassageiros,
+    })
+  }, [servicos, margemLucro, desconto, taxasAdicionais, numPassageiros])
+
+  // Set default validity date if not set
+  useEffect(() => {
+    if (!dataValidade && validadeDias) {
+      const d = new Date()
+      d.setDate(d.getDate() + validadeDias)
+      setDataValidade(d.toISOString().split('T')[0])
+    }
+  }, [validadeDias, dataValidade])
+
+  // Services Management
+  const handleAdicionarServico = (categoriaPadrao: ServicoCategoria = 'hospedagem') => {
+    const novoItem: ServicoItem = {
+      id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      categoria: categoriaPadrao,
+      nome: '',
+      descricao: '',
+      fornecedor: '',
+      quantidade: 1,
+      valor_unitario: 0,
+      valor_custo_total: 0,
+      observacoes: '',
+    }
+    setServicos([...servicos, novoItem])
+  }
+
+  const handleRemoverServico = (id: string) => {
+    setServicos(servicos.filter((s) => s.id !== id))
+  }
+
+  const handleDuplicarServico = (index: number) => {
+    const item = servicos[index]
+    const duplicado: ServicoItem = {
+      ...item,
+      id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      nome: `${item.nome} (Cópia)`,
+    }
+    const novos = [...servicos]
+    novos.splice(index + 1, 0, duplicado)
+    setServicos(novos)
+    toast.info('Item duplicado')
+  }
+
+  const handleAtualizarServico = (id: string, campo: keyof ServicoItem, valor: any) => {
+    setServicos((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s
+
+        const atualizado = { ...s, [campo]: valor }
+
+        // Recalculate cost total if quantity or unit price changed
+        if (campo === 'quantidade' || campo === 'valor_unitario') {
+          const qtd = campo === 'quantidade' ? Number(valor) : s.quantidade || 1
+          const unit = campo === 'valor_unitario' ? Number(valor) : s.valor_unitario || 0
+          atualizado.valor_custo_total = qtd * unit
+        }
+
+        return atualizado
+      }),
+    )
+  }
+
+  const montarObjetoCotacao = (): Cotacao => {
+    return {
+      id: cotacaoInicial?.id,
+      codigo: codigo || `COT-${new Date().getFullYear()}-NOVA`,
+      cliente_nome: clienteNome,
+      cliente_email: clienteEmail,
+      cliente_telefone: clienteTelefone,
+      cliente_cpf_passaporte: clienteCpfPassaporte,
+      destino,
+      data_ida: dataIda,
+      data_volta: dataVolta,
+      num_passageiros: numPassageiros,
+      num_criancas: numCriancas,
+      status,
+      servicos,
+      margem_lucro: margemLucro,
+      desconto,
+      taxas_adicionais: taxasAdicionais,
+      moeda,
+      cotacao_moeda: cotacaoMoeda,
+      valor_custo_total: totais.valorCustoTotal,
+      valor_lucro: totais.valorMargemLucro,
+      valor_venda_total: totais.valorFinalVenda,
+      observacoes,
+      condicoes_gerais: condicoesGerais,
+      formas_pagamento: formasPagamento,
+      validade_dias: validadeDias,
+      data_validade: dataValidade,
+      created: cotacaoInicial?.created,
+      updated: cotacaoInicial?.updated,
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!clienteNome.trim()) {
+      toast.error('Informe o nome do cliente')
+      return
+    }
+    if (!destino.trim()) {
+      toast.error('Informe o destino da viagem')
+      return
+    }
+    if (servicos.length === 0) {
+      toast.error('Adicione pelo menos um serviço ou item à cotação')
+      return
+    }
+
+    const payload = montarObjetoCotacao()
+    await onSalvar(payload, cotacaoInicial?.id)
+  }
+
+  const handlePrevisualizar = () => {
+    if (!clienteNome.trim() || !destino.trim()) {
+      toast.error('Preencha ao menos o nome do cliente e o destino para visualizar a cotação')
+      return
+    }
+    const cotacao = montarObjetoCotacao()
+    onVisualizar(cotacao)
+  }
+
+  const getCategoriaIcon = (cat: ServicoCategoria) => {
+    switch (cat) {
+      case 'passagem_aerea':
+        return <Plane className="w-4 h-4 text-sky-600" />
+      case 'hospedagem':
+        return <Hotel className="w-4 h-4 text-indigo-600" />
+      case 'traslado':
+        return <Car className="w-4 h-4 text-emerald-600" />
+      case 'passeio':
+        return <Compass className="w-4 h-4 text-amber-600" />
+      case 'seguro_viagem':
+        return <ShieldCheck className="w-4 h-4 text-teal-600" />
+      case 'aluguel_carro':
+        return <KeySquare className="w-4 h-4 text-blue-600" />
+      case 'cruzeiro':
+        return <Ship className="w-4 h-4 text-cyan-600" />
+      case 'trem':
+        return <Train className="w-4 h-4 text-purple-600" />
+      case 'taxas_visto':
+        return <FileText className="w-4 h-4 text-orange-600" />
+      default:
+        return <Package className="w-4 h-4 text-slate-600" />
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-8 max-w-6xl mx-auto pb-16">
+      {/* Top Header Bar */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onCancelar}
+            className="text-slate-600 hover:text-slate-900 border-slate-300"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1.5" />
+            Voltar
+          </Button>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+              {cotacaoInicial
+                ? `Editar Cotação #${cotacaoInicial.codigo}`
+                : 'Nova Cotação de Viagem'}
+            </h1>
+            <p className="text-xs text-slate-500">
+              Preencha os serviços, defina sua margem e gere a proposta para o cliente
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handlePrevisualizar}
+            className="flex-1 sm:flex-none border-sky-300 text-sky-800 bg-sky-50/70 hover:bg-sky-100 font-semibold"
+          >
+            <Eye className="w-4 h-4 mr-1.5 text-sky-600" />
+            Visualizar / PDF
+          </Button>
+          <Button
+            type="submit"
+            disabled={salvando}
+            className="flex-1 sm:flex-none bg-sky-800 hover:bg-sky-900 text-white font-bold shadow-sm"
+          >
+            <Save className="w-4 h-4 mr-1.5" />
+            {salvando ? 'Salvando...' : 'Salvar Cotação'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main Content Columns (2 Cols) */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Card 1: Dados do Cliente */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="bg-slate-50/60 pb-3 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center text-sky-800 font-bold text-xs">
+                    1
+                  </div>
+                  <CardTitle className="text-base font-bold text-slate-800">
+                    Dados do Cliente
+                  </CardTitle>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="status" className="text-xs text-slate-500 font-medium">
+                    Status:
+                  </Label>
+                  <Select value={status} onValueChange={(val: StatusCotacao) => setStatus(val)}>
+                    <SelectTrigger className="w-32 h-8 text-xs font-semibold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="rascunho">Rascunho</SelectItem>
+                      <SelectItem value="enviada">Enviada</SelectItem>
+                      <SelectItem value="aprovada">Aprovada</SelectItem>
+                      <SelectItem value="recusada">Não Fechada</SelectItem>
+                      <SelectItem value="finalizada">Finalizada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="clienteNome" className="text-xs font-bold text-slate-700">
+                    Nome Completo do Cliente *
+                  </Label>
+                  <Input
+                    id="clienteNome"
+                    required
+                    placeholder="Ex: João da Silva / Família Oliveira"
+                    value={clienteNome}
+                    onChange={(e) => setClienteNome(e.target.value)}
+                    className="font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="clienteTelefone" className="text-xs font-bold text-slate-700">
+                    Telefone / WhatsApp
+                  </Label>
+                  <Input
+                    id="clienteTelefone"
+                    placeholder="(11) 99999-9999"
+                    value={clienteTelefone}
+                    onChange={(e) => setClienteTelefone(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="clienteEmail" className="text-xs font-bold text-slate-700">
+                    E-mail do Cliente
+                  </Label>
+                  <Input
+                    id="clienteEmail"
+                    type="email"
+                    placeholder="cliente@email.com"
+                    value={clienteEmail}
+                    onChange={(e) => setClienteEmail(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label
+                    htmlFor="clienteCpfPassaporte"
+                    className="text-xs font-bold text-slate-700"
+                  >
+                    CPF ou Passaporte (Opcional)
+                  </Label>
+                  <Input
+                    id="clienteCpfPassaporte"
+                    placeholder="000.000.000-00 ou Número de Passaporte"
+                    value={clienteCpfPassaporte}
+                    onChange={(e) => setClienteCpfPassaporte(e.target.value)}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Destino e Datas da Viagem */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="bg-slate-50/60 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center text-sky-800 font-bold text-xs">
+                  2
+                </div>
+                <CardTitle className="text-base font-bold text-slate-800">
+                  Destino & Datas da Viagem
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="destino" className="text-xs font-bold text-slate-700">
+                    Destino Principal / Roteiro *
+                  </Label>
+                  <Input
+                    id="destino"
+                    required
+                    placeholder="Ex: Paris & Roma | Orlando (Disney) | Punta Cana All-Inclusive"
+                    value={destino}
+                    onChange={(e) => setDestino(e.target.value)}
+                    className="font-medium text-slate-900"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="dataIda"
+                    className="text-xs font-bold text-slate-700 flex items-center gap-1"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-sky-600" />
+                    Data de Ida / Início
+                  </Label>
+                  <Input
+                    id="dataIda"
+                    type="date"
+                    value={dataIda}
+                    onChange={(e) => setDataIda(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="dataVolta"
+                    className="text-xs font-bold text-slate-700 flex items-center gap-1"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-sky-600" />
+                    Data de Retorno / Fim
+                  </Label>
+                  <Input
+                    id="dataVolta"
+                    type="date"
+                    value={dataVolta}
+                    onChange={(e) => setDataVolta(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="numPassageiros"
+                    className="text-xs font-bold text-slate-700 flex items-center gap-1"
+                  >
+                    <Users className="w-3.5 h-3.5 text-sky-600" />
+                    Adultos
+                  </Label>
+                  <Input
+                    id="numPassageiros"
+                    type="number"
+                    min="1"
+                    value={numPassageiros}
+                    onChange={(e) => setNumPassageiros(parseInt(e.target.value, 10) || 1)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="numCriancas" className="text-xs font-bold text-slate-700">
+                    Crianças / Bebês
+                  </Label>
+                  <Input
+                    id="numCriancas"
+                    type="number"
+                    min="0"
+                    value={numCriancas}
+                    onChange={(e) => setNumCriancas(parseInt(e.target.value, 10) || 0)}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 3: Itens e Serviços da Cotação */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="bg-slate-50/60 pb-3 border-b border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center text-sky-800 font-bold text-xs">
+                    3
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-bold text-slate-800">
+                      Serviços Inclusos & Precificação
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Insira os custos de cada serviço para cálculo automático da margem de lucro
+                    </CardDescription>
+                  </div>
+                </div>
+
+                {/* Quick Add Buttons */}
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAdicionarServico('passagem_aerea')}
+                    className="h-7 text-xs bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100"
+                  >
+                    <Plane className="w-3 h-3 mr-1" /> + Aéreo
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAdicionarServico('hospedagem')}
+                    className="h-7 text-xs bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                  >
+                    <Hotel className="w-3 h-3 mr-1" /> + Hotel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAdicionarServico('traslado')}
+                    className="h-7 text-xs bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                  >
+                    <Car className="w-3 h-3 mr-1" /> + Transfer
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAdicionarServico('passeio')}
+                    className="h-7 text-xs bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+                  >
+                    <Compass className="w-3 h-3 mr-1" /> + Tour
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAdicionarServico('seguro_viagem')}
+                    className="h-7 text-xs bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100"
+                  >
+                    <ShieldCheck className="w-3 h-3 mr-1" /> + Seguro
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              {servicos.length === 0 ? (
+                <div className="py-12 border-2 border-dashed border-slate-200 rounded-xl text-center space-y-3 bg-slate-50/40">
+                  <div className="w-12 h-12 bg-sky-100 text-sky-700 rounded-full flex items-center justify-center mx-auto">
+                    <Plane className="w-6 h-6" />
+                  </div>
+                  <h4 className="font-bold text-slate-800 text-sm">
+                    Nenhum serviço adicionado ainda
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Clique nos botões rápidos acima ou no botão abaixo para adicionar passagens,
+                    hotéis, passeios e seguros.
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={() => handleAdicionarServico('passagem_aerea')}
+                    className="bg-sky-800 hover:bg-sky-900 text-white text-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar Primeiro Serviço
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {servicos.map((servico, index) => (
+                    <div
+                      key={servico.id}
+                      className="border border-slate-200 bg-white rounded-xl p-4 shadow-sm hover:border-sky-300 transition"
+                    >
+                      {/* Item Header */}
+                      <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="text-xs font-bold text-slate-400">#{index + 1}</span>
+                          <div className="flex items-center gap-1.5">
+                            {getCategoriaIcon(servico.categoria)}
+                            <Select
+                              value={servico.categoria}
+                              onValueChange={(val: ServicoCategoria) =>
+                                handleAtualizarServico(servico.id, 'categoria', val)
+                              }
+                            >
+                              <SelectTrigger className="h-7 text-xs font-bold w-48 border-none bg-slate-100 hover:bg-slate-200">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {CATEGORIAS_SERVICO.map((cat) => (
+                                  <SelectItem key={cat.value} value={cat.value}>
+                                    {cat.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDuplicarServico(index)}
+                            title="Duplicar Item"
+                            className="h-7 w-7 p-0 text-slate-400 hover:text-slate-700"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoverServico(servico.id)}
+                            title="Remover Item"
+                            className="h-7 w-7 p-0 text-rose-500 hover:text-rose-700 hover:bg-rose-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Item Inputs */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                        <div className="sm:col-span-7 space-y-1">
+                          <Label className="text-[11px] font-bold text-slate-600">
+                            Título do Serviço / Item *
+                          </Label>
+                          <Input
+                            placeholder="Ex: Passagem LATAM GRU-MIA com bagagem / Hotel Hilton 4 noites"
+                            value={servico.nome}
+                            required
+                            onChange={(e) =>
+                              handleAtualizarServico(servico.id, 'nome', e.target.value)
+                            }
+                            className="h-8 text-xs font-semibold"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-5 space-y-1">
+                          <Label className="text-[11px] font-bold text-slate-600">
+                            Fornecedor / Operadora (Opcional)
+                          </Label>
+                          <Input
+                            placeholder="Ex: CVC, Decolar, Air France, Bedsonline"
+                            value={servico.fornecedor || ''}
+                            onChange={(e) =>
+                              handleAtualizarServico(servico.id, 'fornecedor', e.target.value)
+                            }
+                            className="h-8 text-xs text-slate-600"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-12 space-y-1">
+                          <Label className="text-[11px] font-bold text-slate-600">
+                            Descrição / Detalhes para o Cliente (Aparece na proposta)
+                          </Label>
+                          <Input
+                            placeholder="Ex: Quarto Superior com vista, café da manhã incluso, transfers in/out com motorista."
+                            value={servico.descricao || ''}
+                            onChange={(e) =>
+                              handleAtualizarServico(servico.id, 'descricao', e.target.value)
+                            }
+                            className="h-8 text-xs text-slate-700"
+                          />
+                        </div>
+
+                        {/* Financial Inputs for this Service */}
+                        <div className="sm:col-span-3 space-y-1">
+                          <Label className="text-[11px] font-bold text-slate-600">Quantidade</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={servico.quantidade}
+                            onChange={(e) =>
+                              handleAtualizarServico(
+                                servico.id,
+                                'quantidade',
+                                parseInt(e.target.value, 10) || 1,
+                              )
+                            }
+                            className="h-8 text-xs"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-4 space-y-1">
+                          <Label className="text-[11px] font-bold text-slate-600">
+                            Custo Unitário ({moeda})
+                          </Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={servico.valor_unitario}
+                            onChange={(e) =>
+                              handleAtualizarServico(
+                                servico.id,
+                                'valor_unitario',
+                                parseFloat(e.target.value) || 0,
+                              )
+                            }
+                            className="h-8 text-xs"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-5 space-y-1">
+                          <Label className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
+                            <span>Subtotal Custo do Item</span>
+                            <span className="text-sky-700 font-extrabold text-xs">
+                              {formatarMoeda(servico.valor_custo_total, moeda)}
+                            </span>
+                          </Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={servico.valor_custo_total}
+                            onChange={(e) =>
+                              handleAtualizarServico(
+                                servico.id,
+                                'valor_custo_total',
+                                parseFloat(e.target.value) || 0,
+                              )
+                            }
+                            className="h-8 text-xs bg-slate-50 font-semibold text-slate-900"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleAdicionarServico('outros')}
+                    className="w-full border-dashed border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold py-2"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar Outro Serviço
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Card 4: Observações e Condições */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="bg-slate-50/60 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center text-sky-800 font-bold text-xs">
+                  4
+                </div>
+                <CardTitle className="text-base font-bold text-slate-800">
+                  Condições Comerciais & Observações
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="formasPagamento" className="text-xs font-bold text-slate-700">
+                  Formas de Pagamento Sugeridas
+                </Label>
+                <Textarea
+                  id="formasPagamento"
+                  rows={2}
+                  placeholder="Ex: Entrada 20% PIX + 10x sem juros no cartão | 5% de desconto à vista via PIX"
+                  value={formasPagamento}
+                  onChange={(e) => setFormasPagamento(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="observacoes" className="text-xs font-bold text-slate-700">
+                  Observações Personalizadas da Proposta
+                </Label>
+                <Textarea
+                  id="observacoes"
+                  rows={2}
+                  placeholder="Ex: Cotação inclui bagagem de 23kg, taxas de embarque e hotel próximo à praia."
+                  value={observacoes}
+                  onChange={(e) => setObservacoes(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="validadeDias" className="text-xs font-bold text-slate-700">
+                    Validade da Cotação (Dias)
+                  </Label>
+                  <Input
+                    id="validadeDias"
+                    type="number"
+                    min="1"
+                    value={validadeDias}
+                    onChange={(e) => setValidadeDias(parseInt(e.target.value, 10) || 7)}
+                    className="text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="dataValidade" className="text-xs font-bold text-slate-700">
+                    Data Limite de Validade
+                  </Label>
+                  <Input
+                    id="dataValidade"
+                    type="date"
+                    value={dataValidade}
+                    onChange={(e) => setDataValidade(e.target.value)}
+                    className="text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="condicoesGerais" className="text-xs font-bold text-slate-700">
+                  Condições Gerais & Políticas de Cancelamento
+                </Label>
+                <Textarea
+                  id="condicoesGerais"
+                  rows={3}
+                  value={condicoesGerais}
+                  onChange={(e) => setCondicoesGerais(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sidebar Calculation Summary (Sticky on Desktop) */}
+        <div className="space-y-6">
+          <div className="sticky top-6 space-y-6">
+            {/* Card de Precificação & Margem */}
+            <Card className="border-sky-200 bg-gradient-to-b from-slate-900 to-slate-950 text-white shadow-xl overflow-hidden">
+              <div className="p-5 bg-sky-900/60 border-b border-sky-800/80 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-sky-400" />
+                  <h3 className="font-extrabold text-white text-base">Precificação & Lucro</h3>
+                </div>
+                <Select value={moeda} onValueChange={(v: Moeda) => setMoeda(v)}>
+                  <SelectTrigger className="w-24 h-7 text-xs bg-slate-800/80 border-slate-700 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BRL">BRL (R$)</SelectItem>
+                    <SelectItem value="USD">USD ($)</SelectItem>
+                    <SelectItem value="EUR">EUR (€)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <CardContent className="p-5 space-y-5 text-slate-200">
+                {/* Margem de Lucro Input Slider/Number */}
+                <div className="space-y-2 bg-slate-800/60 p-3 rounded-lg border border-slate-700/80">
+                  <div className="flex items-center justify-between">
+                    <Label
+                      htmlFor="margemLucro"
+                      className="text-xs font-semibold text-sky-300 flex items-center gap-1"
+                    >
+                      <Percent className="w-3.5 h-3.5" /> Margem de Lucro da Agência
+                    </Label>
+                    <span className="text-sm font-black text-sky-400">{margemLucro}%</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="margemLucro"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={margemLucro}
+                      onChange={(e) => setMargemLucro(parseFloat(e.target.value) || 0)}
+                      className="bg-slate-900 border-slate-700 text-white text-sm font-bold h-9"
+                    />
+                    <div className="flex gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setMargemLucro(10)}
+                        className={`h-9 px-2 text-xs ${margemLucro === 10 ? 'bg-sky-600 text-white border-sky-500' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
+                      >
+                        10%
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setMargemLucro(15)}
+                        className={`h-9 px-2 text-xs ${margemLucro === 15 ? 'bg-sky-600 text-white border-sky-500' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
+                      >
+                        15%
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setMargemLucro(20)}
+                        className={`h-9 px-2 text-xs ${margemLucro === 20 ? 'bg-sky-600 text-white border-sky-500' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
+                      >
+                        20%
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desconto e Taxas */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="taxasAdicionais"
+                      className="text-[11px] text-slate-400 font-semibold"
+                    >
+                      Taxas / Encargos (+)
+                    </Label>
+                    <Input
+                      id="taxasAdicionais"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={taxasAdicionais}
+                      onChange={(e) => setTaxasAdicionais(parseFloat(e.target.value) || 0)}
+                      className="bg-slate-900 border-slate-700 text-white text-xs h-8"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="desconto" className="text-[11px] text-slate-400 font-semibold">
+                      Desconto (-)
+                    </Label>
+                    <Input
+                      id="desconto"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={desconto}
+                      onChange={(e) => setDesconto(parseFloat(e.target.value) || 0)}
+                      className="bg-slate-900 border-slate-700 text-white text-xs h-8"
+                    />
+                  </div>
+                </div>
+
+                {/* Resumo Financeiro Breakdown */}
+                <div className="pt-3 border-t border-slate-800 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Custo Total dos Serviços (Fornecedores):</span>
+                    <span className="font-semibold text-slate-200">
+                      {formatarMoeda(totais.valorCustoTotal, moeda)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-emerald-400 font-medium">
+                    <span>Lucro Bruto Previsto ({margemLucro}%):</span>
+                    <span className="font-bold">
+                      + {formatarMoeda(totais.valorMargemLucro, moeda)}
+                    </span>
+                  </div>
+
+                  {taxasAdicionais > 0 && (
+                    <div className="flex justify-between text-slate-400">
+                      <span>Taxas Adicionais:</span>
+                      <span className="text-slate-200">
+                        + {formatarMoeda(taxasAdicionais, moeda)}
+                      </span>
+                    </div>
+                  )}
+
+                  {desconto > 0 && (
+                    <div className="flex justify-between text-amber-400">
+                      <span>Desconto Aplicado:</span>
+                      <span>- {formatarMoeda(desconto, moeda)}</span>
+                    </div>
+                  )}
+
+                  {/* Valor Final da Venda */}
+                  <div className="pt-3 mt-3 border-t-2 border-sky-500/50 bg-sky-950/40 p-3 rounded-lg flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase font-extrabold tracking-wider text-sky-300">
+                        Preço Final de Venda
+                      </span>
+                      <span className="text-xl font-black text-white">
+                        {formatarMoeda(totais.valorFinalVenda, moeda)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-slate-400 pt-1">
+                      <span>Valor por passageiro adulto ({numPassageiros}x):</span>
+                      <span className="font-bold text-sky-300">
+                        {formatarMoeda(totais.valorPorPessoa, moeda)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botões de Ação */}
+                <div className="space-y-2 pt-2">
+                  <Button
+                    type="submit"
+                    disabled={salvando}
+                    className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold h-10 shadow-lg shadow-sky-900/40"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {salvando ? 'Salvando Cotação...' : 'Salvar Cotação'}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handlePrevisualizar}
+                    className="w-full border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold h-9"
+                  >
+                    <Eye className="w-3.5 h-3.5 mr-1.5 text-sky-400" />
+                    Visualizar Proposta / Imprimir PDF
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Dica rápida de vendas */}
+            <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 text-xs text-sky-900 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-sky-950">
+                <Sparkles className="w-4 h-4 text-sky-600" />
+                <span>Dica de Agente</span>
+              </div>
+              <p className="text-slate-600 leading-relaxed">
+                Após salvar ou visualizar a proposta, você poderá baixar o PDF comercial ou enviar o
+                resumo diretamente ao cliente pelo WhatsApp.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  )
+}
