@@ -1,5 +1,40 @@
 import pb from '@/lib/pocketbase/client'
-import { Cotacao, ConfiguracoesAgencia, ServicoItem } from '@/types/cotacao'
+import { Cotacao, ConfiguracoesAgencia, ServicoItem, OpcaoVoo } from '@/types/cotacao'
+
+export function mapRecordToOpcaoVoo(record: Record<string, unknown>): OpcaoVoo {
+  return {
+    id: record.id as string,
+    cotacao_id: (record.cotacao_id as string) || '',
+    descricao: (record.descricao as string) || '',
+    companhia: (record.companhia as string) || '',
+    numero_voo: (record.numero_voo as string) || '',
+    data_voo: (record.data_voo as string) || '',
+    horario_partida: (record.horario_partida as string) || '',
+    horario_chegada: (record.horario_chegada as string) || '',
+    origem: (record.origem as string) || '',
+    destino: (record.destino as string) || '',
+    status: (record.status as OpcaoVoo['status']) || 'Recomendada',
+    custo: Number(record.custo) || 0,
+    margem_desejada: Number(record.margem_desejada) || 15,
+    imposto_percentual: Number(record.imposto_percentual) || 6,
+    preco_mercado:
+      record.preco_mercado !== undefined &&
+      record.preco_mercado !== null &&
+      record.preco_mercado !== ''
+        ? Number(record.preco_mercado)
+        : undefined,
+    modo_precificacao: (record.modo_precificacao as OpcaoVoo['modo_precificacao']) || 'margem',
+    desconto_mercado_percentual:
+      record.desconto_mercado_percentual !== undefined &&
+      record.desconto_mercado_percentual !== null &&
+      record.desconto_mercado_percentual !== ''
+        ? Number(record.desconto_mercado_percentual)
+        : undefined,
+    ordem: Number(record.ordem) || 0,
+    created: (record.created as string) || '',
+    updated: (record.updated as string) || '',
+  }
+}
 
 function parseServicos(data: unknown): ServicoItem[] {
   if (!data) return []
@@ -67,13 +102,145 @@ function mapRecordToCotacao(record: Record<string, unknown>): Cotacao {
   }
 }
 
+export const opcoesVooService = {
+  async listarPorCotacao(cotacaoId: string): Promise<OpcaoVoo[]> {
+    try {
+      const records = await pb.collection('opcoes_voo').getFullList({
+        filter: `cotacao_id = "${cotacaoId}"`,
+        sort: 'ordem,created',
+      })
+      return records.map((r) => mapRecordToOpcaoVoo(r as unknown as Record<string, unknown>))
+    } catch (err) {
+      console.error('Erro ao listar opções de voo:', err)
+      return []
+    }
+  },
+
+  async sincronizarParaCotacao(
+    cotacaoId: string,
+    opcoes: Omit<OpcaoVoo, 'id' | 'created' | 'updated' | 'cotacao_id'>[],
+  ): Promise<OpcaoVoo[]> {
+    try {
+      // Buscar opções existentes
+      const existentes = await pb.collection('opcoes_voo').getFullList({
+        filter: `cotacao_id = "${cotacaoId}"`,
+      })
+
+      // Excluir todas as anteriores para recriar na ordem exata
+      for (const item of existentes) {
+        await pb.collection('opcoes_voo').delete(item.id)
+      }
+
+      const criadas: OpcaoVoo[] = []
+      for (let i = 0; i < opcoes.length; i++) {
+        const op = opcoes[i]
+        const rec = await pb.collection('opcoes_voo').create({
+          cotacao_id: cotacaoId,
+          descricao:
+            op.descricao || `${op.companhia || 'Voo'} • ${op.origem || ''} → ${op.destino || ''}`,
+          companhia: op.companhia || '',
+          numero_voo: op.numero_voo || '',
+          data_voo: op.data_voo || '',
+          horario_partida: op.horario_partida || '',
+          horario_chegada: op.horario_chegada || '',
+          origem: op.origem || '',
+          destino: op.destino || '',
+          status: op.status || (i === 0 ? 'Recomendada' : 'Alternativa'),
+          custo: Number(op.custo) || 0,
+          margem_desejada: Number(op.margem_desejada) || 15,
+          imposto_percentual: Number(op.imposto_percentual) || 6,
+          preco_mercado: op.preco_mercado !== undefined ? Number(op.preco_mercado) : null,
+          modo_precificacao: op.modo_precificacao || 'margem',
+          desconto_mercado_percentual:
+            op.desconto_mercado_percentual !== undefined
+              ? Number(op.desconto_mercado_percentual)
+              : null,
+          ordem: i,
+        })
+        criadas.push(mapRecordToOpcaoVoo(rec as unknown as Record<string, unknown>))
+      }
+
+      return criadas
+    } catch (err) {
+      console.error('Erro ao sincronizar opções de voo:', err)
+      return []
+    }
+  },
+}
+
+export function gerarOpcaoPadraoLegada(cotacao: Cotacao): OpcaoVoo {
+  // Procura se tem serviço de passagem aérea para pegar dados
+  const servicoAereo = cotacao.servicos.find((s) => s.categoria === 'passagem_aerea')
+  const custoAereo = servicoAereo
+    ? Number(servicoAereo.valor_custo_total) || 0
+    : cotacao.valor_custo_total || 0
+
+  return {
+    id: `legado-${cotacao.id || Date.now()}`,
+    cotacao_id: cotacao.id,
+    descricao: servicoAereo?.nome || `Opção Principal • ${cotacao.destino}`,
+    companhia: servicoAereo?.fornecedor || 'Companhia Aérea',
+    numero_voo: '',
+    data_voo: cotacao.data_ida || '',
+    horario_partida: '',
+    horario_chegada: '',
+    origem: 'São Paulo (GRU)',
+    destino: cotacao.destino || '',
+    status: 'Recomendada',
+    custo: custoAereo,
+    margem_desejada: cotacao.margem_lucro || 15,
+    imposto_percentual: 6,
+    preco_mercado: cotacao.preco_mercado,
+    modo_precificacao: cotacao.modo_precificacao || 'margem',
+    desconto_mercado_percentual: cotacao.desconto_mercado_percentual || 10,
+    ordem: 0,
+  }
+}
+
 export const cotacoesService = {
   async listar(): Promise<Cotacao[]> {
     try {
       const records = await pb.collection('cotacoes').getFullList({
         sort: '-created',
       })
-      return records.map((r) => mapRecordToCotacao(r as unknown as Record<string, unknown>))
+      const cotacoes = records.map((r) =>
+        mapRecordToCotacao(r as unknown as Record<string, unknown>),
+      )
+
+      // Carregar opções de voo para todas as cotações
+      try {
+        const todasOpcoes = await pb.collection('opcoes_voo').getFullList({
+          sort: 'ordem,created',
+        })
+        const opcoesPorCotacao: Record<string, OpcaoVoo[]> = {}
+        for (const opRec of todasOpcoes) {
+          const op = mapRecordToOpcaoVoo(opRec as unknown as Record<string, unknown>)
+          if (op.cotacao_id) {
+            if (!opcoesPorCotacao[op.cotacao_id]) {
+              opcoesPorCotacao[op.cotacao_id] = []
+            }
+            opcoesPorCotacao[op.cotacao_id].push(op)
+          }
+        }
+
+        for (const c of cotacoes) {
+          if (c.id && opcoesPorCotacao[c.id] && opcoesPorCotacao[c.id].length > 0) {
+            c.opcoes_voo = opcoesPorCotacao[c.id]
+          } else {
+            // Compatibilidade com cotações antigas sem opções
+            c.opcoes_voo = [gerarOpcaoPadraoLegada(c)]
+          }
+        }
+      } catch (errOp) {
+        console.warn('Erro ao carregar opções de voo na listagem:', errOp)
+        for (const c of cotacoes) {
+          if (!c.opcoes_voo || c.opcoes_voo.length === 0) {
+            c.opcoes_voo = [gerarOpcaoPadraoLegada(c)]
+          }
+        }
+      }
+
+      return cotacoes
     } catch (err) {
       console.error('Erro ao listar cotações:', err)
       return []
@@ -83,26 +250,57 @@ export const cotacoesService = {
   async buscarPorId(id: string): Promise<Cotacao | null> {
     try {
       const record = await pb.collection('cotacoes').getOne(id)
-      return mapRecordToCotacao(record as unknown as Record<string, unknown>)
+      const cotacao = mapRecordToCotacao(record as unknown as Record<string, unknown>)
+      const opcoes = await opcoesVooService.listarPorCotacao(id)
+      if (opcoes.length > 0) {
+        cotacao.opcoes_voo = opcoes
+      } else {
+        cotacao.opcoes_voo = [gerarOpcaoPadraoLegada(cotacao)]
+      }
+      return cotacao
     } catch (err) {
       console.error('Erro ao buscar cotação:', err)
       return null
     }
   },
 
-  async criar(dados: Omit<Cotacao, 'id' | 'created' | 'updated'>): Promise<Cotacao> {
+  async criar(
+    dados: Omit<Cotacao, 'id' | 'created' | 'updated'> & { opcoes_voo?: OpcaoVoo[] },
+  ): Promise<Cotacao> {
+    const { opcoes_voo, ...dadosCotacao } = dados
     const payload = {
-      ...dados,
-      servicos: dados.servicos || [],
+      ...dadosCotacao,
+      servicos: dadosCotacao.servicos || [],
     }
     const record = await pb.collection('cotacoes').create(payload)
-    return mapRecordToCotacao(record as unknown as Record<string, unknown>)
+    const cotacaoCriada = mapRecordToCotacao(record as unknown as Record<string, unknown>)
+
+    if (opcoes_voo && opcoes_voo.length > 0 && cotacaoCriada.id) {
+      const salvas = await opcoesVooService.sincronizarParaCotacao(cotacaoCriada.id, opcoes_voo)
+      cotacaoCriada.opcoes_voo = salvas
+    } else if (cotacaoCriada.id) {
+      cotacaoCriada.opcoes_voo = [gerarOpcaoPadraoLegada(cotacaoCriada)]
+    }
+
+    return cotacaoCriada
   },
 
   async atualizar(id: string, dados: Partial<Cotacao>): Promise<Cotacao> {
-    const payload = { ...dados }
+    const { opcoes_voo, ...dadosCotacao } = dados
+    const payload = { ...dadosCotacao }
     const record = await pb.collection('cotacoes').update(id, payload)
-    return mapRecordToCotacao(record as unknown as Record<string, unknown>)
+    const cotacaoAtualizada = mapRecordToCotacao(record as unknown as Record<string, unknown>)
+
+    if (opcoes_voo !== undefined) {
+      const salvas = await opcoesVooService.sincronizarParaCotacao(id, opcoes_voo)
+      cotacaoAtualizada.opcoes_voo = salvas
+    } else {
+      const opcoes = await opcoesVooService.listarPorCotacao(id)
+      cotacaoAtualizada.opcoes_voo =
+        opcoes.length > 0 ? opcoes : [gerarOpcaoPadraoLegada(cotacaoAtualizada)]
+    }
+
+    return cotacaoAtualizada
   },
 
   async excluir(id: string): Promise<boolean> {

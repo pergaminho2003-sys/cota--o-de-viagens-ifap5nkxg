@@ -114,6 +114,92 @@ export interface CenarioPrecificacaoModoB {
   valido: boolean
 }
 
+export interface CalculoOpcaoVooResult {
+  modoPrecificacao: ModoPrecificacao
+  custo: number
+  precoFinal: number
+  lucroBruto: number
+  margemBrutaPercent: number
+  imposto: number
+  lucroLiquido: number
+  margemLiquidaPercent: number
+  economiaClienteReais: number
+  economiaClientePercent: number
+  temVantagemComercial: boolean
+  cenarioA: CenarioPrecificacaoModoA
+  cenarioB: CenarioPrecificacaoModoB
+}
+
+export function calcularOpcaoVoo(opcao: {
+  custo: number
+  margem_desejada: number
+  imposto_percentual: number
+  preco_mercado?: number
+  modo_precificacao: ModoPrecificacao
+  desconto_mercado_percentual?: number
+}): CalculoOpcaoVooResult {
+  const custo = Math.max(0, Number(opcao.custo) || 0)
+  const margemDesejada = Number(opcao.margem_desejada) || 0
+  const impostoPercent = Number(opcao.imposto_percentual) || 0
+  const precoMercado =
+    opcao.preco_mercado !== undefined &&
+    opcao.preco_mercado !== null &&
+    !isNaN(Number(opcao.preco_mercado)) &&
+    Number(opcao.preco_mercado) > 0
+      ? Number(opcao.preco_mercado)
+      : undefined
+  const descontoMercado = Number(opcao.desconto_mercado_percentual) || 0
+  const modo = opcao.modo_precificacao || 'margem'
+
+  const cenarioA = calcularCenarioModoA({
+    custoTotal: custo,
+    margemPercent: margemDesejada,
+    impostoPercent: impostoPercent,
+    precoMercado,
+  })
+
+  const cenarioB = calcularCenarioModoB({
+    custoTotal: custo,
+    precoMercado,
+    descontoPercent: descontoMercado,
+    impostoPercent: impostoPercent,
+  })
+
+  if (modo === 'desconto_mercado' && cenarioB.valido) {
+    return {
+      modoPrecificacao: 'desconto_mercado',
+      custo,
+      precoFinal: cenarioB.precoFinal,
+      lucroBruto: cenarioB.lucroBruto,
+      margemBrutaPercent: cenarioB.margemBrutaPercent,
+      imposto: cenarioB.imposto,
+      lucroLiquido: cenarioB.lucroLiquido,
+      margemLiquidaPercent: cenarioB.margemLiquidaPercent,
+      economiaClienteReais: cenarioB.economiaClienteReais,
+      economiaClientePercent: cenarioB.economiaClientePercent,
+      temVantagemComercial: cenarioB.economiaClienteReais > 0,
+      cenarioA,
+      cenarioB,
+    }
+  }
+
+  return {
+    modoPrecificacao: 'margem',
+    custo,
+    precoFinal: cenarioA.precoFinal,
+    lucroBruto: cenarioA.lucroBruto,
+    margemBrutaPercent: cenarioA.margemBrutaPercent,
+    imposto: cenarioA.imposto,
+    lucroLiquido: cenarioA.lucroLiquido,
+    margemLiquidaPercent: cenarioA.margemLiquidaPercent,
+    economiaClienteReais: cenarioA.economiaClienteReais,
+    economiaClientePercent: cenarioA.economiaClientePercent,
+    temVantagemComercial: cenarioA.temEconomia,
+    cenarioA,
+    cenarioB,
+  }
+}
+
 export function calcularCenarioModoA(params: {
   custoTotal: number
   margemPercent: number

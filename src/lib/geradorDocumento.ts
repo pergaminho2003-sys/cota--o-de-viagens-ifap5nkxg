@@ -1,5 +1,11 @@
-import { Cotacao, ConfiguracoesAgencia, CATEGORIAS_SERVICO } from '@/types/cotacao'
-import { formatarMoeda, formatarData, calcularDuracaoDias, calcularTotaisCotacao } from './calculos'
+import {
+  Cotacao,
+  ConfiguracoesAgencia,
+  CATEGORIAS_SERVICO,
+  OpcaoVoo,
+  STATUS_OPCAO_VOO_CONFIG,
+} from '@/types/cotacao'
+import { formatarMoeda, formatarData, calcularDuracaoDias, calcularOpcaoVoo } from './calculos'
 
 export function gerarHTMLDocumentoProposta(
   cotacao: Cotacao,
@@ -7,39 +13,27 @@ export function gerarHTMLDocumentoProposta(
 ): string {
   const duracao = calcularDuracaoDias(cotacao.data_ida, cotacao.data_volta)
   const totalPassageiros = (cotacao.num_passageiros || 1) + (cotacao.num_criancas || 0)
-  const valorPorPessoa = (cotacao.valor_venda_total || 0) / (cotacao.num_passageiros || 1)
+  const numPassageiros = cotacao.num_passageiros || 1
 
-  const impostoAliquota =
-    agencia.imposto_lucro_padrao !== undefined ? agencia.imposto_lucro_padrao : 6
-
-  const totais = calcularTotaisCotacao({
-    servicos: cotacao.servicos || [],
-    modoPrecificacao: cotacao.modo_precificacao || 'margem',
-    margemLucroPercent: cotacao.margem_lucro,
-    descontoMercadoPercent: cotacao.desconto_mercado_percentual,
-    precoMercado: cotacao.preco_mercado,
-    desconto: cotacao.desconto || 0,
-    taxasAdicionais: cotacao.taxas_adicionais || 0,
-    numPassageiros: cotacao.num_passageiros || 1,
-    impostoLucroPercent: impostoAliquota,
-  })
-
-  // Vantagem Comercial / Economia Garantida no PDF:
-  // Só aparece se houver preço de mercado informado e economia > 0
-  const temVantagemComercial =
-    cotacao.preco_mercado !== undefined &&
-    cotacao.preco_mercado !== null &&
-    cotacao.preco_mercado > 0 &&
-    totais.economiaClienteReais > 0
-
-  const servicosPorCategoria = cotacao.servicos.reduce(
-    (acc, item) => {
-      if (!acc[item.categoria]) acc[item.categoria] = []
-      acc[item.categoria].push(item)
-      return acc
-    },
-    {} as Record<string, typeof cotacao.servicos>,
-  )
+  const opcoesVoo: OpcaoVoo[] =
+    cotacao.opcoes_voo && cotacao.opcoes_voo.length > 0
+      ? cotacao.opcoes_voo
+      : [
+          {
+            companhia: 'Companhia Aérea',
+            descricao: 'Opção Principal de Voo',
+            origem: 'São Paulo',
+            destino: cotacao.destino || '',
+            status: 'Recomendada',
+            custo: cotacao.valor_custo_total || 0,
+            margem_desejada: cotacao.margem_lucro || 15,
+            imposto_percentual: 6,
+            preco_mercado: cotacao.preco_mercado,
+            modo_precificacao: cotacao.modo_precificacao || 'margem',
+            desconto_mercado_percentual: cotacao.desconto_mercado_percentual || 10,
+            ordem: 0,
+          },
+        ]
 
   const logoHtml = agencia.logo_url
     ? `<img src="${agencia.logo_url}" alt="${agencia.nome_agencia}" style="max-height: 56px; max-width: 180px; object-fit: contain;" />`
@@ -48,24 +42,97 @@ export function gerarHTMLDocumentoProposta(
         <span>${agencia.nome_agencia || 'AGÊNCIA DE VIAGENS'}</span>
        </div>`
 
-  const servicosRows = cotacao.servicos
+  // Cards de Opções de Voo Independentes (NÃO SOMAR VALORES)
+  const opcoesVooCards = opcoesVoo
+    .map((op, idx) => {
+      const calc = calcularOpcaoVoo({
+        custo: op.custo,
+        margem_desejada: op.margem_desejada,
+        imposto_percentual: op.imposto_percentual,
+        preco_mercado: op.preco_mercado,
+        modo_precificacao: op.modo_precificacao,
+        desconto_mercado_percentual: op.desconto_mercado_percentual,
+      })
+
+      const valorPorPessoa = calc.precoFinal / numPassageiros
+      const isRecomendada = op.status === 'Recomendada'
+      const isMaisBarata = op.status === 'Mais barata'
+
+      let badgeBg = '#0369a1'
+      let badgeLabel = op.status
+      if (isRecomendada) {
+        badgeBg = '#059669'
+      } else if (isMaisBarata) {
+        badgeBg = '#d97706'
+      }
+
+      return `
+      <div style="background: #ffffff; border: 2px solid ${isRecomendada ? '#059669' : '#cbd5e1'}; border-radius: 10px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); page-break-inside: avoid;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;">
+          <div>
+            <span style="display: inline-block; background: ${badgeBg}; color: #ffffff; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 10px; border-radius: 6px; margin-bottom: 4px;">
+              ${badgeLabel}
+            </span>
+            <div style="font-size: 15px; font-weight: 800; color: #0f172a;">
+              ${op.descricao || `${op.companhia} • ${op.origem} → ${op.destino}`}
+            </div>
+            <div style="font-size: 12px; color: #475569; margin-top: 2px;">
+              <strong>Companhia:</strong> ${op.companhia || 'Aérea'} ${op.numero_voo ? `(${op.numero_voo})` : ''}
+              ${op.data_voo ? ` • <strong>Data:</strong> ${formatarData(op.data_voo)}` : ''}
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700;">Preço da Opção</div>
+            <div style="font-size: 20px; font-weight: 900; color: #0f2744;">
+              ${formatarMoeda(calc.precoFinal, cotacao.moeda)}
+            </div>
+            <div style="font-size: 11px; color: #0284c7; font-weight: 600;">
+              ${formatarMoeda(valorPorPessoa, cotacao.moeda)} / adulto (${numPassageiros}x)
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: #334155;">
+          <div>
+            ${op.origem ? `<strong>Origem:</strong> ${op.origem}` : ''}
+            ${op.horario_partida ? ` às ${op.horario_partida}` : ''}
+            <span style="margin: 0 6px; color: #94a3b8;">➔</span>
+            ${op.destino ? `<strong>Destino:</strong> ${op.destino}` : ''}
+            ${op.horario_chegada ? ` às ${op.horario_chegada}` : ''}
+          </div>
+          ${
+            calc.temVantagemComercial && op.preco_mercado
+              ? `
+            <div style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">
+              Economia de ${formatarMoeda(calc.economiaClienteReais, cotacao.moeda)} (${calc.economiaClientePercent.toFixed(0)}% OFF vs balcão)
+            </div>
+          `
+              : ''
+          }
+        </div>
+      </div>
+    `
+    })
+    .join('')
+
+  // Tabela de Serviços Adicionais (se houver)
+  const servicosRows = (cotacao.servicos || [])
     .map((s, idx) => {
       const catObj = CATEGORIAS_SERVICO.find((c) => c.value === s.categoria)
       const catLabel = catObj ? catObj.label : s.categoria
       return `
     <tr style="border-bottom: 1px solid #e2e8f0; ${idx % 2 === 1 ? 'background-color: #f8fafc;' : 'background-color: #ffffff;'}">
-      <td style="padding: 12px 14px; vertical-align: top;">
-        <span style="display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: #e0f2fe; color: #0369a1; margin-bottom: 4px;">
+      <td style="padding: 10px 14px; vertical-align: top;">
+        <span style="display: inline-block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; background: #e0f2fe; color: #0369a1; margin-bottom: 3px;">
           ${catLabel}
         </span>
-        <div style="font-weight: 600; color: #0f172a; font-size: 13.5px;">${s.nome}</div>
-        ${s.descricao ? `<div style="font-size: 12px; color: #475569; margin-top: 3px; line-height: 1.4;">${s.descricao}</div>` : ''}
-        ${s.observacoes ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px; font-style: italic;">Obs: ${s.observacoes}</div>` : ''}
+        <div style="font-weight: 600; color: #0f172a; font-size: 13px;">${s.nome}</div>
+        ${s.descricao ? `<div style="font-size: 11.5px; color: #475569; margin-top: 2px; line-height: 1.4;">${s.descricao}</div>` : ''}
       </td>
-      <td style="padding: 12px 14px; text-align: center; vertical-align: top; font-size: 13px; color: #334155; font-weight: 600;">
+      <td style="padding: 10px 14px; text-align: center; vertical-align: top; font-size: 12.5px; color: #334155; font-weight: 600;">
         ${s.quantidade || 1}
       </td>
-      <td style="padding: 12px 14px; text-align: right; vertical-align: top; font-size: 12px; white-space: nowrap;">
+      <td style="padding: 10px 14px; text-align: right; vertical-align: top; font-size: 11.5px; white-space: nowrap;">
         <span style="display: inline-block; padding: 3px 8px; border-radius: 4px; background: #ecfdf5; color: #047857; font-weight: 700; border: 1px solid #a7f3d0;">
           Incluso
         </span>
@@ -74,6 +141,7 @@ export function gerarHTMLDocumentoProposta(
   `
     })
     .join('')
+
   return `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -96,14 +164,14 @@ export function gerarHTMLDocumentoProposta(
       background-color: #ffffff;
       margin: 0;
       padding: 0;
-      font-size: 13px;
+      font-size: 12.5px;
       line-height: 1.5;
     }
     .doc-container {
       width: 100%;
-      max-width: 800px;
+      max-width: 820px;
       margin: 0 auto;
-      padding: 24px;
+      padding: 20px;
       background: #ffffff;
     }
     .header-bar {
@@ -111,8 +179,8 @@ export function gerarHTMLDocumentoProposta(
       justify-content: space-between;
       align-items: center;
       border-bottom: 2px solid #0f2744;
-      padding-bottom: 16px;
-      margin-bottom: 20px;
+      padding-bottom: 14px;
+      margin-bottom: 18px;
     }
     .badge-quote {
       background: #0f2744;
@@ -120,29 +188,29 @@ export function gerarHTMLDocumentoProposta(
       padding: 6px 14px;
       border-radius: 6px;
       font-weight: 700;
-      font-size: 12px;
+      font-size: 11.5px;
       letter-spacing: 0.5px;
       text-align: right;
     }
     .grid-2 {
       display: flex;
-      gap: 16px;
-      margin-bottom: 20px;
+      gap: 14px;
+      margin-bottom: 18px;
     }
     .box-card {
       flex: 1;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
-      padding: 14px 16px;
+      padding: 12px 14px;
     }
     .box-title {
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.8px;
       color: #0f2744;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -150,8 +218,8 @@ export function gerarHTMLDocumentoProposta(
       padding-bottom: 4px;
     }
     .box-content p {
-      margin: 3px 0;
-      font-size: 12.5px;
+      margin: 2px 0;
+      font-size: 12px;
       color: #1e293b;
     }
     .highlight-dest {
@@ -159,16 +227,27 @@ export function gerarHTMLDocumentoProposta(
       color: #ffffff;
       border-radius: 8px;
       padding: 16px 20px;
-      margin-bottom: 22px;
+      margin-bottom: 18px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
+    .section-title {
+      font-size: 12.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #0f2744;
+      margin: 0 0 10px 0;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .table-servicos {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
-      font-size: 12.5px;
+      margin-bottom: 18px;
+      font-size: 12px;
       border: 1px solid #cbd5e1;
       border-radius: 8px;
       overflow: hidden;
@@ -176,68 +255,36 @@ export function gerarHTMLDocumentoProposta(
     .table-servicos th {
       background: #0f2744;
       color: #ffffff;
-      padding: 10px 14px;
-      font-size: 11.5px;
+      padding: 9px 12px;
+      font-size: 11px;
       font-weight: 700;
       letter-spacing: 0.5px;
       text-transform: uppercase;
-    }
-    .financial-box {
-      display: flex;
-      justify-content: flex-end;
-      margin-bottom: 20px;
-    }
-    .total-card {
-      width: 320px;
-      background: #f1f5f9;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      padding: 14px 18px;
-    }
-    .total-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 12.5px;
-      padding: 4px 0;
-      color: #334155;
-    }
-    .total-final {
-      border-top: 2px solid #0f2744;
-      margin-top: 8px;
-      padding-top: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-    }
-    .total-final-val {
-      font-size: 20px;
-      font-weight: 800;
-      color: #0f2744;
     }
     .terms-section {
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
-      padding: 14px 16px;
-      margin-bottom: 16px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
       font-size: 11.5px;
       color: #334155;
       line-height: 1.5;
     }
     .terms-title {
       font-weight: 700;
-      font-size: 11.5px;
+      font-size: 11px;
       text-transform: uppercase;
       color: #0f2744;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
       letter-spacing: 0.5px;
     }
     .footer-note {
       text-align: center;
-      font-size: 11px;
+      font-size: 10.5px;
       color: #64748b;
-      margin-top: 20px;
-      padding-top: 12px;
+      margin-top: 16px;
+      padding-top: 10px;
       border-top: 1px solid #e2e8f0;
     }
     @media print {
@@ -261,33 +308,33 @@ export function gerarHTMLDocumentoProposta(
     <div class="header-bar">
       <div>
         ${logoHtml}
-        <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+        <div style="font-size: 10.5px; color: #64748b; margin-top: 4px;">
           ${agencia.cnpj_cadastur ? `${agencia.cnpj_cadastur} • ` : ''}${agencia.email_contato || ''}
         </div>
       </div>
       <div style="text-align: right;">
         <div class="badge-quote">PROPOSTA COMERCIAL</div>
         <div style="font-size: 14px; font-weight: 800; color: #0f2744; margin-top: 4px;">${cotacao.codigo || 'COT-VIAGEM'}</div>
-        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Data: ${formatarData(cotacao.created || new Date().toISOString())}</div>
+        <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">Data: ${formatarData(cotacao.created || new Date().toISOString())}</div>
       </div>
     </div>
 
     <!-- Destino e Período Destaque -->
     <div class="highlight-dest">
       <div>
-        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.85; font-weight: 600;">Destino da Viagem</div>
+        <div style="font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.85; font-weight: 600;">Destino da Viagem</div>
         <div style="font-size: 20px; font-weight: 800; margin-top: 2px;">${cotacao.destino}</div>
-        <div style="font-size: 12.5px; opacity: 0.95; margin-top: 4px;">
+        <div style="font-size: 12px; opacity: 0.95; margin-top: 4px;">
           📅 ${formatarData(cotacao.data_ida)} até ${formatarData(cotacao.data_volta)} ${duracao ? `(${duracao} dias / ${duracao > 1 ? duracao - 1 : 1} noites)` : ''}
         </div>
       </div>
       <div style="text-align: right; border-left: 1px solid rgba(255,255,255,0.25); padding-left: 18px;">
-        <div style="font-size: 11px; text-transform: uppercase; opacity: 0.85;">Passageiros</div>
-        <div style="font-size: 18px; font-weight: 700; margin-top: 2px;">
+        <div style="font-size: 10.5px; text-transform: uppercase; opacity: 0.85;">Passageiros</div>
+        <div style="font-size: 17px; font-weight: 700; margin-top: 2px;">
           ${cotacao.num_passageiros} ${cotacao.num_passageiros > 1 ? 'Adultos' : 'Adulto'}
           ${cotacao.num_criancas > 0 ? ` + ${cotacao.num_criancas} Criança(s)` : ''}
         </div>
-        <div style="font-size: 11px; opacity: 0.85; margin-top: 2px;">Total: ${totalPassageiros} pessoa(s)</div>
+        <div style="font-size: 10.5px; opacity: 0.85; margin-top: 2px;">Total: ${totalPassageiros} viajante(s)</div>
       </div>
     </div>
 
@@ -313,71 +360,42 @@ export function gerarHTMLDocumentoProposta(
       </div>
     </div>
 
-    <!-- Tabela de Serviços Inclusos -->
-    <div style="margin-bottom: 6px;">
-      <h3 style="font-size: 13px; font-weight: 700; text-transform: uppercase; color: #0f2744; margin: 0 0 8px 0; letter-spacing: 0.5px;">
-        ✈️ Serviços e Itens Inclusos na Proposta
-      </h3>
+    <!-- SEÇÃO: OPÇÕES DE VOO INDEPENDENTES (AJUSTE 1) -->
+    <div style="margin-bottom: 18px;">
+      <div class="section-title">
+        ✈️ Opções de Voo Disponíveis (${opcoesVoo.length} ${opcoesVoo.length === 1 ? 'opção' : 'opções'})
+      </div>
+      <p style="font-size: 11.5px; color: #64748b; margin: -6px 0 12px 0;">
+        Escolha a opção de voo que melhor atende à sua preferência de horários e orçamento:
+      </p>
+
+      ${opcoesVooCards}
     </div>
 
-    <table class="table-servicos">
-      <thead>
-        <tr>
-          <th style="text-align: left; width: 70%;">Item / Descrição do Serviço</th>
-          <th style="text-align: center; width: 14%;">Qtd</th>
-          <th style="text-align: right; width: 16%;">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${servicosRows}
-      </tbody>
-    </table>
-
-    <!-- Resumo do Investimento & Economia -->
-    <div style="display: flex; justify-content: flex-end; gap: 16px; margin-bottom: 20px; align-items: stretch;">
-      ${
-        temVantagemComercial
-          ? `
-      <div style="flex: 1; background: #ecfdf5; border: 1.5px solid #6ee7b7; border-radius: 8px; padding: 14px 18px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 11px; font-weight: 800; color: #065f46; text-transform: uppercase; letter-spacing: 0.5px;">
-            ✨ Vantagem Comercial / Economia Garantida
-          </span>
-          <span style="background: #059669; color: #ffffff; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 9999px;">
-            ${totais.economiaClientePercent.toFixed(0)}% OFF
-          </span>
+    <!-- Serviços Terrestres Inclusos (Se houver) -->
+    ${
+      (cotacao.servicos || []).length > 0
+        ? `
+      <div style="margin-bottom: 18px;">
+        <div class="section-title">
+          🏨 Serviços Terrestres & Outros Inclusos no Pacote
         </div>
-        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569; margin-bottom: 4px;">
-          <span>Preço de Mercado de Referência:</span>
-          <span style="text-decoration: line-through; font-weight: 600;">${formatarMoeda(cotacao.preco_mercado, cotacao.moeda)}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 12.5px; color: #047857; font-weight: 700; margin-bottom: 6px;">
-          <span>Sua Economia Garantida:</span>
-          <span style="font-size: 14px; font-weight: 800;">${formatarMoeda(totais.economiaClienteReais, cotacao.moeda)}</span>
-        </div>
-        <div style="border-top: 1px dashed #a7f3d0; padding-top: 6px; display: flex; justify-content: space-between; font-size: 12px; color: #065f46; font-weight: 700;">
-          <span>Investimento Especial da Proposta:</span>
-          <span style="font-weight: 800;">${formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}</span>
-        </div>
+        <table class="table-servicos">
+          <thead>
+            <tr>
+              <th style="text-align: left; width: 70%;">Item / Descrição do Serviço</th>
+              <th style="text-align: center; width: 14%;">Qtd</th>
+              <th style="text-align: right; width: 16%;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${servicosRows}
+          </tbody>
+        </table>
       </div>
-      `
-          : ''
-      }
-
-      <div class="total-card">
-        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; margin-bottom: 4px;">
-          Investimento Total da Proposta
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: baseline;">
-          <div style="font-size: 12px; color: #0369a1; font-weight: 600;">
-            ${formatarMoeda(valorPorPessoa, cotacao.moeda)} / adulto (${cotacao.num_passageiros}x)
-          </div>
-          <div class="total-final-val">
-            ${formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}
-          </div>
-        </div>
-      </div>
-    </div>
+    `
+        : ''
+    }
 
     <!-- Formas de Pagamento & Condições -->
     ${

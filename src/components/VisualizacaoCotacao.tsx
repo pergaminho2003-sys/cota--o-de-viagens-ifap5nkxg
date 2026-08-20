@@ -4,20 +4,15 @@ import {
   ConfiguracoesAgencia,
   CATEGORIAS_SERVICO,
   STATUS_COTACAO_CONFIG,
+  OpcaoVoo,
+  STATUS_OPCAO_VOO_CONFIG,
 } from '@/types/cotacao'
-import {
-  formatarMoeda,
-  formatarData,
-  calcularDuracaoDias,
-  calcularTotaisCotacao,
-} from '@/lib/calculos'
+import { formatarMoeda, formatarData, calcularDuracaoDias, calcularOpcaoVoo } from '@/lib/calculos'
 import { imprimirOuSalvarPDF } from '@/lib/geradorDocumento'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   Printer,
-  Download,
-  Share2,
   ArrowLeft,
   Edit,
   Building2,
@@ -27,8 +22,10 @@ import {
   CheckCircle2,
   Sparkles,
   DollarSign,
-  Send,
   MessageCircle,
+  Plane,
+  Layers,
+  ArrowRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -48,28 +45,27 @@ export function VisualizacaoCotacao({
   const containerRef = useRef<HTMLDivElement>(null)
   const duracao = calcularDuracaoDias(cotacao.data_ida, cotacao.data_volta)
   const totalPassageiros = (cotacao.num_passageiros || 1) + (cotacao.num_criancas || 0)
-  const valorPorPessoa = (cotacao.valor_venda_total || 0) / (cotacao.num_passageiros || 1)
+  const numPassageiros = cotacao.num_passageiros || 1
 
-  const impostoAliquota =
-    configAgencia.imposto_lucro_padrao !== undefined ? configAgencia.imposto_lucro_padrao : 6
-
-  const totais = calcularTotaisCotacao({
-    servicos: cotacao.servicos || [],
-    modoPrecificacao: cotacao.modo_precificacao || 'margem',
-    margemLucroPercent: cotacao.margem_lucro,
-    descontoMercadoPercent: cotacao.desconto_mercado_percentual,
-    precoMercado: cotacao.preco_mercado,
-    desconto: cotacao.desconto || 0,
-    taxasAdicionais: cotacao.taxas_adicionais || 0,
-    numPassageiros: cotacao.num_passageiros || 1,
-    impostoLucroPercent: impostoAliquota,
-  })
-
-  const temComparativoMercado =
-    cotacao.preco_mercado !== undefined &&
-    cotacao.preco_mercado !== null &&
-    cotacao.preco_mercado > 0 &&
-    totais.economiaClienteReais > 0
+  const opcoesVoo: OpcaoVoo[] =
+    cotacao.opcoes_voo && cotacao.opcoes_voo.length > 0
+      ? cotacao.opcoes_voo
+      : [
+          {
+            companhia: 'Companhia Aérea',
+            descricao: 'Opção Principal de Voo',
+            origem: 'São Paulo',
+            destino: cotacao.destino || '',
+            status: 'Recomendada',
+            custo: cotacao.valor_custo_total || 0,
+            margem_desejada: cotacao.margem_lucro || 15,
+            imposto_percentual: 6,
+            preco_mercado: cotacao.preco_mercado,
+            modo_precificacao: cotacao.modo_precificacao || 'margem',
+            desconto_mercado_percentual: cotacao.desconto_mercado_percentual || 10,
+            ordem: 0,
+          },
+        ]
 
   const statusConfig = STATUS_COTACAO_CONFIG[cotacao.status] || STATUS_COTACAO_CONFIG.rascunho
 
@@ -78,31 +74,36 @@ export function VisualizacaoCotacao({
   }
 
   const handleCopiarResumoWhatsApp = () => {
+    const textoOpcoes = opcoesVoo
+      .map((op, i) => {
+        const c = calcularOpcaoVoo({
+          custo: op.custo,
+          margem_desejada: op.margem_desejada,
+          imposto_percentual: op.imposto_percentual,
+          preco_mercado: op.preco_mercado,
+          modo_precificacao: op.modo_precificacao,
+          desconto_mercado_percentual: op.desconto_mercado_percentual,
+        })
+        const porAdulto = c.precoFinal / numPassageiros
+        return `*Opção ${i + 1} (${op.status}):* ${op.descricao || `${op.companhia} ${op.origem} → ${op.destino}`}
+💰 Valor: ${formatarMoeda(c.precoFinal, cotacao.moeda)} (${formatarMoeda(porAdulto, cotacao.moeda)}/adulto)`
+      })
+      .join('\n\n')
+
     const texto = `*PROPOSTA DE VIAGEM - ${configAgencia.nome_agencia || 'Agência'}*
 ✈️ *Destino:* ${cotacao.destino}
 📅 *Período:* ${formatarData(cotacao.data_ida)} a ${formatarData(cotacao.data_volta)} (${duracao ? `${duracao} dias` : ''})
 👥 *Passageiros:* ${cotacao.num_passageiros} adulto(s)${cotacao.num_criancas > 0 ? ` + ${cotacao.num_criancas} criança(s)` : ''}
 
-*Serviços Inclusos:*
-${cotacao.servicos.map((s) => `• ${s.nome}${s.descricao ? ` (${s.descricao})` : ''}`).join('\n')}
+*OPÇÕES DE VOO DISPONÍVEIS:*
+${textoOpcoes}
 
-💰 *Valor Total da Proposta:* ${formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}
-👤 *Por adulto:* ${formatarMoeda(valorPorPessoa, cotacao.moeda)}
-
+${(cotacao.servicos || []).length > 0 ? `*Serviços Terrestres Inclusos:*\n${cotacao.servicos.map((s) => `• ${s.nome}${s.descricao ? ` (${s.descricao})` : ''}`).join('\n')}\n` : ''}
 ${cotacao.formas_pagamento ? `💳 *Condições de Pagamento:*\n${cotacao.formas_pagamento}\n` : ''}
 Qualquer dúvida estamos à disposição!`
 
     navigator.clipboard.writeText(texto)
-    toast.success('Resumo formatado copiado! Cole no WhatsApp ou e-mail.')
-  }
-
-  const handleEnviarWhatsApp = () => {
-    const telefoneLimpo = (cotacao.cliente_telefone || '').replace(/\D/g, '')
-    const texto = `Olá ${cotacao.cliente_nome}! Segue a proposta da sua viagem para *${cotacao.destino}* no valor total de *${formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}*.\n\nFicamos à disposição para qualquer ajuste!`
-    const url = telefoneLimpo
-      ? `https://wa.me/55${telefoneLimpo}?text=${encodeURIComponent(texto)}`
-      : `https://wa.me/?text=${encodeURIComponent(texto)}`
-    window.open(url, '_blank')
+    toast.success('Resumo com opções de voo copiado! Cole no WhatsApp ou e-mail.')
   }
 
   return (
@@ -153,7 +154,7 @@ Qualquer dúvida estamos à disposição!`
           <Button
             size="sm"
             onClick={handleGerarPDF}
-            className="bg-navy-900 bg-sky-900 hover:bg-sky-950 text-white font-bold shadow-sm"
+            className="bg-sky-900 hover:bg-sky-950 text-white font-bold shadow-sm"
           >
             <Printer className="w-4 h-4 mr-1.5" />
             Imprimir / Salvar PDF
@@ -161,7 +162,7 @@ Qualquer dúvida estamos à disposição!`
         </div>
       </div>
 
-      {/* DOCUMENT PREVIEW CARD (Design de Proposta Comercial Azul Marinho e Branco) */}
+      {/* DOCUMENT PREVIEW CARD */}
       <div
         ref={containerRef}
         className="bg-white border border-slate-300 rounded-2xl shadow-xl overflow-hidden print:shadow-none print:border-none p-6 sm:p-12 text-slate-800 space-y-8"
@@ -279,134 +280,168 @@ Qualquer dúvida estamos à disposição!`
           </div>
         </div>
 
-        {/* Tabela de Serviços Inclusos */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-sky-700" />
-              <span>Serviços e Itens Inclusos na Proposta</span>
-            </h3>
-            <span className="text-xs font-semibold text-slate-500">
-              {cotacao.servicos.length} {cotacao.servicos.length === 1 ? 'item' : 'itens'}
-            </span>
+        {/* SEÇÃO: OPÇÕES DE VOO INDEPENDENTES (AJUSTE 1) */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <Plane className="w-4 h-4 text-sky-700" />
+                <span>Opções de Voo Disponíveis ({opcoesVoo.length})</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Valores calculados de forma independente por opção — selecione a melhor alternativa
+                para sua viagem.
+              </p>
+            </div>
           </div>
 
-          <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-900 text-white text-xs uppercase tracking-wider">
-                  <th className="py-3 px-4 font-bold">Serviço / Detalhes</th>
-                  <th className="py-3 px-4 text-center font-bold w-24">Qtd</th>
-                  <th className="py-3 px-4 text-right font-bold w-32">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
-                {cotacao.servicos.map((servico, index) => {
-                  const catObj = CATEGORIAS_SERVICO.find((c) => c.value === servico.categoria)
-                  return (
-                    <tr
-                      key={servico.id || index}
-                      className={index % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}
-                    >
-                      <td className="py-3.5 px-4 space-y-1">
-                        <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-sky-100 text-sky-800">
-                          {catObj?.label || servico.categoria}
+          <div className="grid grid-cols-1 gap-4">
+            {opcoesVoo.map((opcao, index) => {
+              const calc = calcularOpcaoVoo({
+                custo: opcao.custo,
+                margem_desejada: opcao.margem_desejada,
+                imposto_percentual: opcao.imposto_percentual,
+                preco_mercado: opcao.preco_mercado,
+                modo_precificacao: opcao.modo_precificacao,
+                desconto_mercado_percentual: opcao.desconto_mercado_percentual,
+              })
+
+              const valorPorPessoa = calc.precoFinal / numPassageiros
+              const statusCfg =
+                STATUS_OPCAO_VOO_CONFIG[opcao.status] || STATUS_OPCAO_VOO_CONFIG.Recomendada
+
+              return (
+                <div
+                  key={opcao.id || index}
+                  className={`border-2 rounded-xl p-5 shadow-sm space-y-4 transition ${
+                    opcao.status === 'Recomendada'
+                      ? 'border-emerald-500 bg-emerald-50/20'
+                      : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${statusCfg.badgeClass}`}
+                        >
+                          {statusCfg.label}
                         </span>
-                        <div className="font-bold text-slate-900 text-sm">{servico.nome}</div>
-                        {servico.descricao && (
-                          <div className="text-xs text-slate-600 leading-relaxed">
-                            {servico.descricao}
-                          </div>
-                        )}
-                        {servico.observacoes && (
-                          <div className="text-[11px] text-slate-400 italic">
-                            Obs: {servico.observacoes}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-center font-semibold text-slate-700">
-                        {servico.quantidade || 1}
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <span className="inline-flex items-center text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
-                          Incluso
+                        <span className="text-xs text-slate-400 font-medium">
+                          Opção #{index + 1}
                         </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                      </div>
+                      <h4 className="text-base font-bold text-slate-900">
+                        {opcao.descricao ||
+                          `${opcao.companhia || 'Companhia'} • ${opcao.origem} → ${opcao.destino}`}
+                      </h4>
+                      <p className="text-xs text-slate-600">
+                        <strong>Companhia:</strong> {opcao.companhia || 'Aérea'}{' '}
+                        {opcao.numero_voo ? `(${opcao.numero_voo})` : ''}
+                        {opcao.data_voo ? ` • Data: ${formatarData(opcao.data_voo)}` : ''}
+                      </p>
+                    </div>
+
+                    <div className="sm:text-right bg-slate-50 sm:bg-transparent p-3 sm:p-0 rounded-lg border sm:border-0 border-slate-200">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                        Preço Final da Opção
+                      </span>
+                      <span className="text-2xl font-black text-slate-900 block">
+                        {formatarMoeda(calc.precoFinal, cotacao.moeda)}
+                      </span>
+                      <span className="text-xs font-semibold text-sky-700 block">
+                        {formatarMoeda(valorPorPessoa, cotacao.moeda)} / adulto ({numPassageiros}x)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Detalhes de Rota e Horários */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                    <div className="flex items-center gap-2 font-medium text-slate-700 flex-wrap">
+                      <span>{opcao.origem || 'Origem'}</span>
+                      {opcao.horario_partida && (
+                        <span className="text-sky-700 font-bold">({opcao.horario_partida})</span>
+                      )}
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{opcao.destino || 'Destino'}</span>
+                      {opcao.horario_chegada && (
+                        <span className="text-sky-700 font-bold">({opcao.horario_chegada})</span>
+                      )}
+                    </div>
+
+                    {calc.temVantagemComercial && opcao.preco_mercado && (
+                      <div className="flex items-center gap-1.5 text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded text-xs font-bold">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>
+                          Economia de {formatarMoeda(calc.economiaClienteReais, cotacao.moeda)} (
+                          {calc.economiaClientePercent.toFixed(0)}% OFF vs balcão)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
 
-        {/* Resumo do Investimento da Proposta & Comparativo de Economia */}
-        <div className="flex flex-col sm:flex-row justify-end items-stretch sm:items-end gap-4 pt-2">
-          {temComparativoMercado && (
-            <div className="flex-1 bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-300 rounded-xl p-5 space-y-2.5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs font-black text-emerald-900 uppercase tracking-wider">
-                  <Sparkles className="w-4 h-4 text-emerald-600" />
-                  <span>Vantagem Comercial / Economia Garantida</span>
-                </div>
-                <span className="bg-emerald-600 text-white font-extrabold text-[11px] px-2.5 py-0.5 rounded-full shadow-sm">
-                  {totais.economiaClientePercent.toFixed(0)}% OFF
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div className="space-y-0.5">
-                  <span className="text-[11px] font-semibold text-slate-500 block">
-                    Preço de Mercado de Referência:
-                  </span>
-                  <span className="text-sm font-bold text-slate-500 line-through">
-                    {formatarMoeda(cotacao.preco_mercado, cotacao.moeda)}
-                  </span>
-                </div>
-
-                <div className="space-y-0.5">
-                  <span className="text-[11px] font-extrabold text-emerald-800 block">
-                    Sua Economia Garantida:
-                  </span>
-                  <span className="text-lg font-black text-emerald-700">
-                    {formatarMoeda(totais.economiaClienteReais, cotacao.moeda)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-emerald-200/80 flex items-center justify-between text-xs font-semibold text-emerald-900">
-                <span>Investimento Especial da Proposta:</span>
-                <span className="font-extrabold text-emerald-800">
-                  {formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="w-full sm:w-80 bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-3">
-            <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500">
-                Valor Total da Viagem
-              </div>
-              <div className="text-2xl font-black text-slate-950">
-                {formatarMoeda(cotacao.valor_venda_total, cotacao.moeda)}
-              </div>
-              <div className="text-xs font-semibold text-sky-700 pt-0.5">
-                {formatarMoeda(valorPorPessoa, cotacao.moeda)} / adulto ({cotacao.num_passageiros}x)
-              </div>
+        {/* Tabela de Serviços Terrestres Adicionais (se houver) */}
+        {(cotacao.servicos || []).length > 0 && (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-sky-700" />
+                <span>Serviços Terrestres Inclusos no Pacote</span>
+              </h3>
+              <span className="text-xs font-semibold text-slate-500">
+                {cotacao.servicos.length} {cotacao.servicos.length === 1 ? 'item' : 'itens'}
+              </span>
             </div>
 
-            {totalPassageiros > 1 && (
-              <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500 flex justify-between">
-                <span>Total de Passageiros:</span>
-                <span className="font-bold text-slate-700">
-                  {cotacao.num_passageiros} adulto(s)
-                  {cotacao.num_criancas > 0 ? ` + ${cotacao.num_criancas} criança(s)` : ''}
-                </span>
-              </div>
-            )}
+            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white text-xs uppercase tracking-wider">
+                    <th className="py-3 px-4 font-bold">Serviço / Detalhes</th>
+                    <th className="py-3 px-4 text-center font-bold w-24">Qtd</th>
+                    <th className="py-3 px-4 text-right font-bold w-32">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {cotacao.servicos.map((servico, index) => {
+                    const catObj = CATEGORIAS_SERVICO.find((c) => c.value === servico.categoria)
+                    return (
+                      <tr
+                        key={servico.id || index}
+                        className={index % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}
+                      >
+                        <td className="py-3.5 px-4 space-y-1">
+                          <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-sky-100 text-sky-800">
+                            {catObj?.label || servico.categoria}
+                          </span>
+                          <div className="font-bold text-slate-900 text-sm">{servico.nome}</div>
+                          {servico.descricao && (
+                            <div className="text-xs text-slate-600 leading-relaxed">
+                              {servico.descricao}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-semibold text-slate-700">
+                          {servico.quantidade || 1}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <span className="inline-flex items-center text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
+                            Incluso
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Formas de Pagamento & Condições */}
         <div className="space-y-4 pt-2">

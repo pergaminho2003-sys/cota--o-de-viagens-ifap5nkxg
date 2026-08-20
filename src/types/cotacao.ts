@@ -28,6 +28,31 @@ export type Moeda = 'BRL' | 'USD' | 'EUR'
 
 export type ModoPrecificacao = 'margem' | 'desconto_mercado'
 
+export type StatusOpcaoVoo = 'Recomendada' | 'Alternativa' | 'Mais barata'
+
+export interface OpcaoVoo {
+  id?: string
+  cotacao_id?: string
+  descricao?: string
+  companhia: string
+  numero_voo?: string
+  data_voo?: string
+  horario_partida?: string
+  horario_chegada?: string
+  origem: string
+  destino: string
+  status: StatusOpcaoVoo
+  custo: number
+  margem_desejada: number
+  imposto_percentual: number
+  preco_mercado?: number
+  modo_precificacao: ModoPrecificacao
+  desconto_mercado_percentual?: number
+  ordem: number
+  created?: string
+  updated?: string
+}
+
 export interface Cotacao {
   id?: string
   codigo: string
@@ -42,6 +67,7 @@ export interface Cotacao {
   num_criancas: number
   status: StatusCotacao
   servicos: ServicoItem[]
+  opcoes_voo?: OpcaoVoo[]
   modo_precificacao?: ModoPrecificacao // 'margem' (Modo A) ou 'desconto_mercado' (Modo B)
   margem_lucro: number // em porcentagem, e.g. 15% (Modo A)
   desconto_mercado_percentual?: number // desconto % que vou dar sobre o preço de mercado (Modo B)
@@ -184,5 +210,34 @@ export const STATUS_COTACAO_CONFIG: Record<
     label: 'Viagem Concluída',
     variant: 'default',
     badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+  },
+}
+
+export const STATUS_OPCAO_VOO_CONFIG: Record<
+  StatusOpcaoVoo,
+  {
+    label: string
+    badgeClass: string
+    badgeBg: string
+    color: string
+  }
+> = {
+  Recomendada: {
+    label: 'Recomendada',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    badgeBg: 'bg-emerald-600 text-white',
+    color: 'emerald',
+  },
+  Alternativa: {
+    label: 'Alternativa',
+    badgeClass: 'bg-sky-100 text-sky-800 border-sky-300',
+    badgeBg: 'bg-sky-600 text-white',
+    color: 'sky',
+  },
+  'Mais barata': {
+    label: 'Mais barata',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+    badgeBg: 'bg-amber-600 text-white',
+    color: 'amber',
   },
 }
