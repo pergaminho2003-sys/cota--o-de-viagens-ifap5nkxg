@@ -8,7 +8,7 @@ import {
   StatusCotacao,
   Moeda,
 } from '@/types/cotacao'
-import { calcularTotaisCotacao, formatarMoeda } from '@/lib/calculos'
+import { calcularTotaisCotacao, calcularSimulacaoDesconto, formatarMoeda } from '@/lib/calculos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -97,6 +97,19 @@ export function FormCotacao({
   const [moeda, setMoeda] = useState<Moeda>(cotacaoInicial?.moeda || 'BRL')
   const [cotacaoMoeda, setCotacaoMoeda] = useState<number>(cotacaoInicial?.cotacao_moeda ?? 1)
 
+  // Simulação de Desconto
+  const [precoMercado, setPrecoMercado] = useState<number | undefined>(
+    cotacaoInicial?.preco_mercado !== undefined && cotacaoInicial.preco_mercado !== null
+      ? cotacaoInicial.preco_mercado
+      : undefined,
+  )
+  const [margemMinimaAceitavel, setMargemMinimaAceitavel] = useState<number>(
+    cotacaoInicial?.margem_minima_aceitavel !== undefined &&
+      cotacaoInicial.margem_minima_aceitavel !== null
+      ? cotacaoInicial.margem_minima_aceitavel
+      : 10,
+  )
+
   // Terms & Conditions
   const [observacoes, setObservacoes] = useState(cotacaoInicial?.observacoes || '')
   const [condicoesGerais, setCondicoesGerais] = useState(
@@ -124,6 +137,16 @@ export function FormCotacao({
       impostoLucroPercent: impostoAliquota,
     })
   }, [servicos, margemLucro, desconto, taxasAdicionais, numPassageiros, impostoAliquota])
+
+  const simulacao = useMemo(() => {
+    return calcularSimulacaoDesconto({
+      custoTotal: totais.valorCustoTotal,
+      markupPercent: margemLucro,
+      impostoPercent: impostoAliquota,
+      precoMercado,
+      margemMinimaAceitavelPercent: margemMinimaAceitavel,
+    })
+  }, [totais.valorCustoTotal, margemLucro, impostoAliquota, precoMercado, margemMinimaAceitavel])
 
   // Set default validity date if not set
   useEffect(() => {
@@ -209,6 +232,11 @@ export function FormCotacao({
       valor_custo_total: totais.valorCustoTotal,
       valor_lucro: totais.valorMargemLucro,
       valor_venda_total: totais.valorFinalVenda,
+      preco_mercado:
+        precoMercado !== undefined && precoMercado !== null && !isNaN(precoMercado)
+          ? precoMercado
+          : undefined,
+      margem_minima_aceitavel: margemMinimaAceitavel,
       observacoes,
       condicoes_gerais: condicoesGerais,
       formas_pagamento: formasPagamento,
@@ -957,7 +985,7 @@ export function FormCotacao({
 
                   <div className="space-y-1">
                     <Label htmlFor="desconto" className="text-[11px] text-slate-400 font-semibold">
-                      Desconto (-)
+                      Desconto Aplicado (-)
                     </Label>
                     <Input
                       id="desconto"
@@ -971,6 +999,150 @@ export function FormCotacao({
                   </div>
                 </div>
 
+                {/* SEÇÃO DE SIMULAÇÃO DE DESCONTO */}
+                <div className="pt-2 border-t border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Simulação de Desconto</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                      Visão do Dono
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="precoMercado"
+                        className="text-[11px] text-slate-300 font-medium flex items-center justify-between"
+                      >
+                        <span>Preço Mercado ({moeda})</span>
+                      </Label>
+                      <Input
+                        id="precoMercado"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Ex: 5200.00"
+                        value={precoMercado !== undefined ? precoMercado : ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setPrecoMercado(val === '' ? undefined : parseFloat(val))
+                        }}
+                        className="bg-slate-900 border-amber-500/40 focus:border-amber-400 text-white text-xs h-8"
+                      />
+                      <span className="text-[10px] text-slate-400 block leading-tight">
+                        Referência concorrente
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="margemMinimaAceitavel"
+                        className="text-[11px] text-slate-300 font-medium flex items-center justify-between"
+                      >
+                        <span>Margem Mín. Líquida (%)</span>
+                      </Label>
+                      <Input
+                        id="margemMinimaAceitavel"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        placeholder="10"
+                        value={margemMinimaAceitavel}
+                        onChange={(e) => setMargemMinimaAceitavel(parseFloat(e.target.value) || 0)}
+                        className="bg-slate-900 border-amber-500/40 focus:border-amber-400 text-white text-xs h-8 font-bold text-amber-300"
+                      />
+                      <span className="text-[10px] text-slate-400 block leading-tight">
+                        Menor margem aceita
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Breakdown detalhado da Simulação */}
+                  <div className="bg-slate-950/80 border border-amber-500/30 rounded-lg p-3 space-y-2 text-xs">
+                    {/* Preço Cheio */}
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span className="text-[11px]">Preço de Venda Cheio:</span>
+                      <span className="font-bold text-slate-100">
+                        {formatarMoeda(simulacao.precoVendaCheio, moeda)}
+                      </span>
+                    </div>
+
+                    {/* Lucro e Margem Cheia */}
+                    <div className="flex justify-between items-center text-slate-400 text-[11px]">
+                      <span>Lucro Líquido Cheio:</span>
+                      <span className="text-emerald-400 font-medium">
+                        {formatarMoeda(simulacao.lucroLiquidoCheio, moeda)} (
+                        {simulacao.margemLiquidaCheiaPercent.toFixed(1)}% líq.)
+                      </span>
+                    </div>
+
+                    <div className="border-t border-slate-800 pt-2 space-y-1.5">
+                      {/* Desconto Máximo */}
+                      <div className="flex justify-between items-center text-amber-300">
+                        <span className="text-[11px] font-semibold">
+                          Desconto Máximo Aceitável:
+                        </span>
+                        <span className="font-black text-amber-400">
+                          {formatarMoeda(simulacao.descontoMaximoReais, moeda)} (
+                          {simulacao.descontoMaximoPercent.toFixed(1)}%)
+                        </span>
+                      </div>
+
+                      {/* Preço Final Mínimo */}
+                      <div className="flex justify-between items-center text-slate-200">
+                        <span className="text-[11px] font-semibold">
+                          Preço Final Mínimo com Desc.:
+                        </span>
+                        <span className="font-extrabold text-white text-sm bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded">
+                          {formatarMoeda(simulacao.precoFinalMinimo, moeda)}
+                        </span>
+                      </div>
+
+                      {/* Imposto Pago nesse cenário */}
+                      <div className="flex justify-between items-center text-rose-300/80 text-[11px]">
+                        <span>Imposto Pago no Cenário Mínimo ({impostoAliquota}%):</span>
+                        <span className="font-medium">
+                          {formatarMoeda(simulacao.impostoPagoCenarioMinimo, moeda)}
+                        </span>
+                      </div>
+
+                      {/* Margem Líquida Final */}
+                      <div className="flex justify-between items-center text-emerald-300 text-[11px]">
+                        <span>Margem Líquida Final Garantida:</span>
+                        <span className="font-bold text-emerald-400">
+                          {simulacao.margemLiquidaFinalPercent.toFixed(1)}% (
+                          {formatarMoeda(simulacao.lucroLiquidoMinimo, moeda)})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Comparativo de Mercado */}
+                    {precoMercado !== undefined && precoMercado > 0 ? (
+                      <div className="border-t border-slate-800 pt-2 space-y-1 bg-emerald-950/30 -mx-3 -mb-3 p-3 rounded-b-lg border-emerald-900/40">
+                        <div className="flex justify-between items-center text-[11px] text-emerald-300">
+                          <span className="font-semibold">Economia p/ Cliente vs. Mercado:</span>
+                          <span className="font-black text-emerald-400 text-sm">
+                            {formatarMoeda(simulacao.economiaClienteReais, moeda)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-[10px] text-emerald-200/80">
+                          <span>% Economia sobre o Mercado:</span>
+                          <span className="font-extrabold text-emerald-300">
+                            {simulacao.percentualEconomiaMercado.toFixed(1)}% mais barato
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="border-t border-slate-800 pt-1 text-[10px] text-slate-400 italic text-center">
+                        Preencha o preço de mercado para comparar a economia do cliente
+                      </div>
+                    )}
+                  </div>
+                </div>
                 {/* Resumo Financeiro Breakdown */}
                 <div className="pt-3 border-t border-slate-800 space-y-2 text-xs">
                   {/* 1. Subtotal (Custo dos Serviços) */}

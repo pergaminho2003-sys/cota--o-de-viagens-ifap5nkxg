@@ -5,7 +5,12 @@ import {
   CATEGORIAS_SERVICO,
   STATUS_COTACAO_CONFIG,
 } from '@/types/cotacao'
-import { formatarMoeda, formatarData, calcularDuracaoDias } from '@/lib/calculos'
+import {
+  formatarMoeda,
+  formatarData,
+  calcularDuracaoDias,
+  calcularSimulacaoDesconto,
+} from '@/lib/calculos'
 import { imprimirOuSalvarPDF } from '@/lib/geradorDocumento'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -44,6 +49,23 @@ export function VisualizacaoCotacao({
   const duracao = calcularDuracaoDias(cotacao.data_ida, cotacao.data_volta)
   const totalPassageiros = (cotacao.num_passageiros || 1) + (cotacao.num_criancas || 0)
   const valorPorPessoa = (cotacao.valor_venda_total || 0) / (cotacao.num_passageiros || 1)
+
+  const impostoAliquota =
+    configAgencia.imposto_lucro_padrao !== undefined ? configAgencia.imposto_lucro_padrao : 6
+
+  const simulacao = calcularSimulacaoDesconto({
+    custoTotal: cotacao.valor_custo_total,
+    markupPercent: cotacao.margem_lucro,
+    impostoPercent: impostoAliquota,
+    precoMercado: cotacao.preco_mercado,
+    margemMinimaAceitavelPercent: cotacao.margem_minima_aceitavel,
+  })
+
+  const temComparativoMercado =
+    cotacao.preco_mercado !== undefined &&
+    cotacao.preco_mercado !== null &&
+    cotacao.preco_mercado > 0 &&
+    simulacao.possuiSimulacaoValida
 
   const statusConfig = STATUS_COTACAO_CONFIG[cotacao.status] || STATUS_COTACAO_CONFIG.rascunho
 
@@ -314,8 +336,49 @@ Qualquer dúvida estamos à disposição!`
           </div>
         </div>
 
-        {/* Resumo do Investimento da Proposta */}
-        <div className="flex flex-col sm:flex-row justify-end items-end gap-6 pt-2">
+        {/* Resumo do Investimento da Proposta & Comparativo de Economia */}
+        <div className="flex flex-col sm:flex-row justify-end items-stretch sm:items-end gap-4 pt-2">
+          {temComparativoMercado && (
+            <div className="flex-1 bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-300 rounded-xl p-5 space-y-2.5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-black text-emerald-900 uppercase tracking-wider">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span>Vantagem Comercial Exclusiva</span>
+                </div>
+                <span className="bg-emerald-600 text-white font-extrabold text-[11px] px-2.5 py-0.5 rounded-full shadow-sm">
+                  Economia de {simulacao.percentualEconomiaMercado.toFixed(0)}%
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-0.5">
+                  <span className="text-[11px] font-semibold text-slate-500 block">
+                    Preço de Mercado de Referência:
+                  </span>
+                  <span className="text-sm font-bold text-slate-500 line-through">
+                    {formatarMoeda(simulacao.precoMercado, cotacao.moeda)}
+                  </span>
+                </div>
+
+                <div className="space-y-0.5">
+                  <span className="text-[11px] font-extrabold text-emerald-800 block">
+                    Sua Economia Garantida:
+                  </span>
+                  <span className="text-lg font-black text-emerald-700">
+                    {formatarMoeda(simulacao.economiaClienteReais, cotacao.moeda)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-emerald-200/80 flex items-center justify-between text-xs font-semibold text-emerald-900">
+                <span>Preço Especial Oportunidade:</span>
+                <span className="font-extrabold text-emerald-800">
+                  {formatarMoeda(simulacao.precoFinalMinimo, cotacao.moeda)}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="w-full sm:w-80 bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-3">
             <div className="space-y-1">
               <div className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500">

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T05:09:51.402Z",
+  "generatedAt": "2026-08-20T06:18:51.757Z",
   "collections": [
     {
       "name": "users",
@@ -220,6 +220,18 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "preco_mercado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "margem_minima_aceitavel",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

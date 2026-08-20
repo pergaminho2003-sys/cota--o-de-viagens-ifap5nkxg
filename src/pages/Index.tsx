@@ -183,6 +183,8 @@ export default function Index() {
       valor_custo_total: 0,
       valor_lucro: 0,
       valor_venda_total: 0,
+      preco_mercado: undefined,
+      margem_minima_aceitavel: 10,
       validade_dias: configAgencia.validade_padrao_dias || 7,
       condicoes_gerais: configAgencia.condicoes_padrao || '',
       formas_pagamento: configAgencia.formas_pagamento_padrao || '',

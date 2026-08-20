@@ -48,6 +48,8 @@ export interface Cotacao {
   valor_custo_total: number
   valor_lucro: number
   valor_venda_total: number
+  preco_mercado?: number // Preço de mercado da passagem (R$) / referência
+  margem_minima_aceitavel?: number // Margem líquida mínima aceitável (%)
   observacoes?: string
   condicoes_gerais?: string
   formas_pagamento?: string

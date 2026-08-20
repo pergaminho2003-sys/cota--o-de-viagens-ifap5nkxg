@@ -38,6 +38,18 @@ function mapRecordToCotacao(record: Record<string, unknown>): Cotacao {
     valor_custo_total: Number(record.valor_custo_total) || 0,
     valor_lucro: Number(record.valor_lucro) || 0,
     valor_venda_total: Number(record.valor_venda_total) || 0,
+    preco_mercado:
+      record.preco_mercado !== undefined &&
+      record.preco_mercado !== null &&
+      record.preco_mercado !== ''
+        ? Number(record.preco_mercado)
+        : undefined,
+    margem_minima_aceitavel:
+      record.margem_minima_aceitavel !== undefined &&
+      record.margem_minima_aceitavel !== null &&
+      record.margem_minima_aceitavel !== ''
+        ? Number(record.margem_minima_aceitavel)
+        : undefined,
     observacoes: (record.observacoes as string) || '',
     condicoes_gerais: (record.condicoes_gerais as string) || '',
     formas_pagamento: (record.formas_pagamento as string) || '',

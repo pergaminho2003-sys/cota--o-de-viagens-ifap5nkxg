@@ -49,10 +49,119 @@ export interface TotaisCalculados {
   aliquotaImpostoLucro: number
   valorImpostoLucro: number
   valorLucroLiquido: number
+  margemLiquidaCheiaPercent: number
   valorTaxas: number
   valorDesconto: number
   valorFinalVenda: number
   valorPorPessoa: number
+}
+
+export interface SimulacaoDescontoResultado {
+  precoVendaCheio: number
+  lucroBrutoCheio: number
+  impostoCheio: number
+  lucroLiquidoCheio: number
+  margemLiquidaCheiaPercent: number
+  precoFinalMinimo: number
+  descontoMaximoReais: number
+  descontoMaximoPercent: number
+  impostoPagoCenarioMinimo: number
+  lucroLiquidoMinimo: number
+  margemLiquidaFinalPercent: number
+  economiaClienteReais: number
+  percentualEconomiaMercado: number
+  precoMercado?: number
+  margemMinimaAceitavelPercent?: number
+  possuiSimulacaoValida: boolean
+}
+
+export function calcularSimulacaoDesconto(params: {
+  custoTotal: number
+  markupPercent: number
+  impostoPercent: number
+  precoMercado?: number
+  margemMinimaAceitavelPercent?: number
+}): SimulacaoDescontoResultado {
+  const custo = Math.max(0, Number(params.custoTotal) || 0)
+  const markup = Number(params.markupPercent) || 0
+  const impostoAliquota = (Number(params.impostoPercent) || 0) / 100 // imposto % em decimal, ex: 0.06
+  const margemMinima =
+    params.margemMinimaAceitavelPercent !== undefined &&
+    params.margemMinimaAceitavelPercent !== null &&
+    !isNaN(Number(params.margemMinimaAceitavelPercent))
+      ? Number(params.margemMinimaAceitavelPercent)
+      : 10
+  const margemMinimaDecimal = margemMinima / 100
+  const precoMercado =
+    params.precoMercado !== undefined &&
+    params.precoMercado !== null &&
+    !isNaN(Number(params.precoMercado)) &&
+    Number(params.precoMercado) > 0
+      ? Number(params.precoMercado)
+      : undefined
+
+  // Cenário Cheio
+  const precoVendaCheio = custo * (1 + markup / 100)
+  const lucroBrutoCheio = precoVendaCheio - custo
+  const impostoCheio = lucroBrutoCheio * impostoAliquota
+  const lucroLiquidoCheio = lucroBrutoCheio - impostoCheio
+  const margemLiquidaCheiaPercent =
+    precoVendaCheio > 0 ? (lucroLiquidoCheio / precoVendaCheio) * 100 : 0
+
+  // Preço final mínimo
+  // Fórmula: Preço final mínimo = [Custo × (1 − imposto %)] ÷ [1 − imposto % − margem mínima aceitável %]
+  const denominador = 1 - impostoAliquota - margemMinimaDecimal
+  let precoFinalMinimo = 0
+  if (denominador > 0 && custo > 0) {
+    precoFinalMinimo = (custo * (1 - impostoAliquota)) / denominador
+  } else if (custo === 0) {
+    precoFinalMinimo = 0
+  } else {
+    // Se denominador <= 0 (margem + imposto >= 100%), fallback seguro para não dividir por zero
+    precoFinalMinimo = precoVendaCheio
+  }
+
+  // Lucro bruto e imposto no cenário com desconto máximo
+  const lucroBrutoCenarioMinimo = Math.max(0, precoFinalMinimo - custo)
+  const impostoPagoCenarioMinimo = lucroBrutoCenarioMinimo * impostoAliquota
+  const lucroLiquidoMinimo = lucroBrutoCenarioMinimo - impostoPagoCenarioMinimo
+  const margemLiquidaFinalPercent =
+    precoFinalMinimo > 0 ? (lucroLiquidoMinimo / precoFinalMinimo) * 100 : margemMinima
+
+  // Desconto máximo
+  const descontoMaximoReais = Math.max(0, precoVendaCheio - precoFinalMinimo)
+  const descontoMaximoPercent =
+    precoVendaCheio > 0 ? (descontoMaximoReais / precoVendaCheio) * 100 : 0
+
+  // Economia do cliente frente ao mercado
+  let economiaClienteReais = 0
+  let percentualEconomiaMercado = 0
+  if (precoMercado !== undefined && precoMercado > 0) {
+    economiaClienteReais = Math.max(0, precoMercado - precoFinalMinimo)
+    percentualEconomiaMercado = (economiaClienteReais / precoMercado) * 100
+  }
+
+  const possuiSimulacaoValida =
+    custo > 0 && precoVendaCheio > 0 && precoMercado !== undefined && precoMercado > 0
+
+  return {
+    precoVendaCheio,
+    lucroBrutoCheio,
+    impostoCheio,
+    lucroLiquidoCheio,
+    margemLiquidaCheiaPercent,
+    precoFinalMinimo,
+    descontoMaximoReais,
+    descontoMaximoPercent,
+    impostoPagoCenarioMinimo,
+    lucroLiquidoMinimo,
+    margemLiquidaFinalPercent,
+    economiaClienteReais,
+    percentualEconomiaMercado,
+    precoMercado,
+    margemMinimaAceitavelPercent: margemMinima,
+    possuiSimulacaoValida,
+  }
 }
 
 export function calcularTotaisCotacao(params: {
@@ -78,6 +187,8 @@ export function calcularTotaisCotacao(params: {
     params.impostoLucroPercent !== undefined ? Number(params.impostoLucroPercent) : 6
   const valorImpostoLucro = (valorMargemLucro * (aliquotaImpostoLucro || 0)) / 100
   const valorLucroLiquido = valorMargemLucro - valorImpostoLucro
+  const margemLiquidaCheiaPercent =
+    valorSubtotalComMargem > 0 ? (valorLucroLiquido / valorSubtotalComMargem) * 100 : 0
 
   const taxas = Number(params.taxasAdicionais) || 0
   const desconto = Number(params.desconto) || 0
@@ -93,6 +204,7 @@ export function calcularTotaisCotacao(params: {
     aliquotaImpostoLucro,
     valorImpostoLucro,
     valorLucroLiquido,
+    margemLiquidaCheiaPercent,
     valorTaxas: taxas,
     valorDesconto: desconto,
     valorFinalVenda,
