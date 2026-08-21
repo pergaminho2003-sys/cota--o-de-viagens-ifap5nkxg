@@ -28,12 +28,13 @@ export type Moeda = 'BRL' | 'USD' | 'EUR'
 
 export type ModoPrecificacao = 'margem' | 'desconto_mercado'
 
-export type StatusOpcaoVoo = 'Recomendada' | 'Alternativa' | 'Mais barata'
+export type StatusOpcaoVoo = 'Mais barata'
 
 export interface OpcaoVoo {
   id?: string
   cotacao_id?: string
   descricao?: string
+  observacao?: string // Campo de texto livre (ex: "melhor horário", "sem conexão")
   companhia: string
   numero_voo?: string
   data_voo?: string
@@ -41,7 +42,7 @@ export interface OpcaoVoo {
   horario_chegada?: string
   origem: string
   destino: string
-  status: StatusOpcaoVoo
+  status?: string
   custo: number
   margem_desejada: number
   imposto_percentual: number
@@ -214,7 +215,7 @@ export const STATUS_COTACAO_CONFIG: Record<
 }
 
 export const STATUS_OPCAO_VOO_CONFIG: Record<
-  StatusOpcaoVoo,
+  string,
   {
     label: string
     badgeClass: string
@@ -222,22 +223,10 @@ export const STATUS_OPCAO_VOO_CONFIG: Record<
     color: string
   }
 > = {
-  Recomendada: {
-    label: 'Recomendada',
+  'Mais barata': {
+    label: 'Mais barata',
     badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
     badgeBg: 'bg-emerald-600 text-white',
     color: 'emerald',
-  },
-  Alternativa: {
-    label: 'Alternativa',
-    badgeClass: 'bg-sky-100 text-sky-800 border-sky-300',
-    badgeBg: 'bg-sky-600 text-white',
-    color: 'sky',
-  },
-  'Mais barata': {
-    label: 'Mais barata',
-    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
-    badgeBg: 'bg-amber-600 text-white',
-    color: 'amber',
   },
 }

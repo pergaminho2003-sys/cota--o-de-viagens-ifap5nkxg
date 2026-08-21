@@ -130,6 +130,56 @@ export interface CalculoOpcaoVooResult {
   cenarioB: CenarioPrecificacaoModoB
 }
 
+/**
+ * Determina o índice da opção "Mais barata" em um conjunto de opções de voo.
+ * Critérios:
+ * 1. Compara o Preço final (valor de venda ao cliente) de todas as opções de voo daquela cotação.
+ * 2. Aplica a tag "Mais barata" somente na opção com o menor Preço final.
+ * 3. Se houver empate exato (diferença < 0.01) entre duas ou mais opções com menor preço, nenhuma recebe a tag.
+ * 4. Se houver só uma opção de voo na cotação (opcoes.length <= 1), não exibir nenhuma tag (retorna null).
+ */
+export function encontrarIndiceOpcaoMaisBarata(
+  opcoes: Array<{
+    custo: number
+    margem_desejada: number
+    imposto_percentual: number
+    preco_mercado?: number
+    modo_precificacao: ModoPrecificacao
+    desconto_mercado_percentual?: number
+  }>,
+): number | null {
+  if (!opcoes || opcoes.length <= 1) {
+    return null
+  }
+
+  const precosFinais = opcoes.map((op) => {
+    const calc = calcularOpcaoVoo(op)
+    return calc.precoFinal
+  })
+
+  let menorPreco = Infinity
+  let indiceMenor = -1
+  let qtdEmpate = 0
+
+  precosFinais.forEach((preco, index) => {
+    // Tolerância para float: 0.005
+    if (preco < menorPreco - 0.005) {
+      menorPreco = preco
+      indiceMenor = index
+      qtdEmpate = 1
+    } else if (Math.abs(preco - menorPreco) <= 0.005) {
+      qtdEmpate++
+    }
+  })
+
+  // Se houver empate no menor preço ou nenhuma opção válida
+  if (qtdEmpate > 1 || indiceMenor === -1) {
+    return null
+  }
+
+  return indiceMenor
+}
+
 export function calcularOpcaoVoo(opcao: {
   custo: number
   margem_desejada: number

@@ -5,9 +5,14 @@ import {
   CATEGORIAS_SERVICO,
   STATUS_COTACAO_CONFIG,
   OpcaoVoo,
-  STATUS_OPCAO_VOO_CONFIG,
 } from '@/types/cotacao'
-import { formatarMoeda, formatarData, calcularDuracaoDias, calcularOpcaoVoo } from '@/lib/calculos'
+import {
+  formatarMoeda,
+  formatarData,
+  calcularDuracaoDias,
+  calcularOpcaoVoo,
+  encontrarIndiceOpcaoMaisBarata,
+} from '@/lib/calculos'
 import { imprimirOuSalvarPDF } from '@/lib/geradorDocumento'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -61,7 +66,7 @@ export function VisualizacaoCotacao({
             descricao: 'Opção Principal de Voo',
             origem: 'São Paulo',
             destino: cotacao.destino || '',
-            status: 'Recomendada',
+            observacao: '',
             custo: cotacao.valor_custo_total || 0,
             margem_desejada: isNaN(margemFallback) ? 15 : margemFallback,
             imposto_percentual: configAgencia.imposto_lucro_padrao ?? 6,
@@ -82,6 +87,8 @@ export function VisualizacaoCotacao({
     imprimirOuSalvarPDF(cotacao, configAgencia)
   }
 
+  const indiceMaisBarata = encontrarIndiceOpcaoMaisBarata(opcoesVoo)
+
   const handleCopiarResumoWhatsApp = () => {
     const textoOpcoes = opcoesVoo
       .map((op, i) => {
@@ -94,7 +101,9 @@ export function VisualizacaoCotacao({
           desconto_mercado_percentual: op.desconto_mercado_percentual,
         })
         const porAdulto = c.precoFinal / numPassageiros
-        return `*Opção ${i + 1} (${op.status}):* ${op.descricao || `${op.companhia} ${op.origem} → ${op.destino}`}
+        const tagMaisBarata = indiceMaisBarata === i ? ' [MAIS BARATA]' : ''
+        const obs = op.observacao ? ` - _${op.observacao.trim()}_` : ''
+        return `*Opção ${i + 1}${tagMaisBarata}:* ${op.descricao || `${op.companhia} ${op.origem} → ${op.destino}`}${obs}
 💰 Valor: ${formatarMoeda(c.precoFinal, cotacao.moeda)} (${formatarMoeda(porAdulto, cotacao.moeda)}/adulto)`
       })
       .join('\n\n')
@@ -316,14 +325,13 @@ Qualquer dúvida estamos à disposição!`
               })
 
               const valorPorPessoa = calc.precoFinal / numPassageiros
-              const statusCfg =
-                STATUS_OPCAO_VOO_CONFIG[opcao.status] || STATUS_OPCAO_VOO_CONFIG.Recomendada
+              const isMaisBarata = indiceMaisBarata === index
 
               return (
                 <div
                   key={opcao.id || index}
                   className={`border-2 rounded-xl p-5 shadow-sm space-y-4 transition ${
-                    opcao.status === 'Recomendada'
+                    isMaisBarata
                       ? 'border-emerald-500 bg-emerald-50/20'
                       : 'border-slate-200 bg-white'
                   }`}
@@ -331,14 +339,21 @@ Qualquer dúvida estamos à disposição!`
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span
-                          className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${statusCfg.badgeClass}`}
-                        >
-                          {statusCfg.label}
-                        </span>
-                        <span className="text-xs text-slate-400 font-medium">
+                        <span className="font-mono text-xs font-bold bg-slate-900 text-white px-2 py-0.5 rounded">
                           Opção #{index + 1}
                         </span>
+
+                        {isMaisBarata && (
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-300">
+                            Mais barata
+                          </span>
+                        )}
+
+                        {opcao.observacao && opcao.observacao.trim() && (
+                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300">
+                            {opcao.observacao.trim()}
+                          </span>
+                        )}
                       </div>
                       <h4 className="text-base font-bold text-slate-900">
                         {opcao.descricao ||

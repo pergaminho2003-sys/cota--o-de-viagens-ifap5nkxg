@@ -8,10 +8,9 @@ import {
   StatusCotacao,
   Moeda,
   OpcaoVoo,
-  StatusOpcaoVoo,
   STATUS_OPCAO_VOO_CONFIG,
 } from '@/types/cotacao'
-import { calcularOpcaoVoo, formatarMoeda } from '@/lib/calculos'
+import { calcularOpcaoVoo, encontrarIndiceOpcaoMaisBarata, formatarMoeda } from '@/lib/calculos'
 import { ModalImportarPrint } from '@/components/ModalImportarPrint'
 import { DadosVooExtraidos } from '@/lib/ocrVoo'
 import { Button } from '@/components/ui/button'
@@ -123,11 +122,12 @@ export function FormCotacao({
     configAgencia.imposto_lucro_padrao !== undefined ? configAgencia.imposto_lucro_padrao : 6
   const margemPadrao = configAgencia.margem_padrao !== undefined ? configAgencia.margem_padrao : 15
 
-  // Opções de Voo Independentes (Ajuste 1)
+  // Opções de Voo Independentes
   const [opcoesVoo, setOpcoesVoo] = useState<OpcaoVoo[]>(() => {
     if (cotacaoInicial?.opcoes_voo && cotacaoInicial.opcoes_voo.length > 0) {
       return cotacaoInicial.opcoes_voo.map((op, idx) => ({
         ...op,
+        observacao: op.observacao || '',
         ordem: op.ordem !== undefined ? op.ordem : idx,
       }))
     }
@@ -136,6 +136,7 @@ export function FormCotacao({
       {
         id: `opcao-${Date.now()}-0`,
         descricao: 'LATAM • GRU → Destino',
+        observacao: '',
         companhia: 'LATAM Airlines',
         numero_voo: '',
         data_voo: cotacaoInicial?.data_ida || '',
@@ -143,7 +144,6 @@ export function FormCotacao({
         horario_chegada: '16:45',
         origem: 'São Paulo (GRU)',
         destino: cotacaoInicial?.destino || '',
-        status: 'Recomendada',
         custo: 3500,
         margem_desejada: margemPadrao,
         imposto_percentual: impostoAliquotaPadrao,
@@ -171,11 +171,10 @@ export function FormCotacao({
   // Gerenciamento de Opções de Voo
   const handleAdicionarOpcaoVoo = () => {
     const novoIndex = opcoesVoo.length
-    const statusSugerido: StatusOpcaoVoo =
-      novoIndex === 1 ? 'Mais barata' : novoIndex === 2 ? 'Alternativa' : 'Alternativa'
     const novaOpcao: OpcaoVoo = {
       id: `opcao-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       descricao: `Opção ${novoIndex + 1} • ${destino || 'Voo'}`,
+      observacao: '',
       companhia: '',
       numero_voo: '',
       data_voo: dataIda || '',
@@ -183,7 +182,6 @@ export function FormCotacao({
       horario_chegada: '',
       origem: opcoesVoo[0]?.origem || 'São Paulo (GRU)',
       destino: destino || opcoesVoo[0]?.destino || '',
-      status: statusSugerido,
       custo: 0,
       margem_desejada: margemPadrao,
       imposto_percentual: impostoAliquotaPadrao,
@@ -212,7 +210,7 @@ export function FormCotacao({
       ...item,
       id: `opcao-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       descricao: `${item.descricao || item.companhia || 'Voo'} (Cópia)`,
-      status: 'Alternativa',
+      observacao: item.observacao || '',
       ordem: index + 1,
     }
     const novas = [...opcoesVoo]
@@ -319,19 +317,18 @@ export function FormCotacao({
 
   // Montar objeto de cotação completo
   const montarObjetoCotacao = (): Cotacao => {
-    // Pegar a opção recomendada ou primeira para os totais gerais da cotação
-    const opcaoPrincipal: OpcaoVoo = opcoesVoo.find((o) => o.status === 'Recomendada') ||
-      opcoesVoo[0] || {
-        companhia: '',
-        origem: '',
-        destino: '',
-        status: 'Recomendada',
-        custo: 0,
-        margem_desejada: margemPadrao,
-        imposto_percentual: impostoAliquotaPadrao,
-        modo_precificacao: 'margem',
-        ordem: 0,
-      }
+    // Pegar a primeira opção para os totais gerais da cotação
+    const opcaoPrincipal: OpcaoVoo = opcoesVoo[0] || {
+      companhia: '',
+      origem: '',
+      destino: '',
+      observacao: '',
+      custo: 0,
+      margem_desejada: margemPadrao,
+      imposto_percentual: impostoAliquotaPadrao,
+      modo_precificacao: 'margem',
+      ordem: 0,
+    }
 
     const margemPrincipal =
       opcaoPrincipal.margem_desejada !== undefined &&
@@ -705,516 +702,578 @@ export function FormCotacao({
               </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 space-y-6">
-              {opcoesVoo.map((opcao, index) => {
-                const calc = calcularOpcaoVoo({
-                  custo: opcao.custo,
-                  margem_desejada: opcao.margem_desejada,
-                  imposto_percentual: opcao.imposto_percentual,
-                  preco_mercado: opcao.preco_mercado,
-                  modo_precificacao: opcao.modo_precificacao,
-                  desconto_mercado_percentual: opcao.desconto_mercado_percentual,
-                })
-
-                const statusCfg =
-                  STATUS_OPCAO_VOO_CONFIG[opcao.status] || STATUS_OPCAO_VOO_CONFIG.Recomendada
-
+              {(() => {
+                const indiceMaisBarata = encontrarIndiceOpcaoMaisBarata(opcoesVoo)
                 return (
-                  <div
-                    key={opcao.id || index}
-                    className="border-2 border-slate-200 hover:border-sky-400 bg-white rounded-2xl p-4 sm:p-5 shadow-sm space-y-5 transition relative"
-                  >
-                    {/* Header da Opção */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-black bg-slate-900 text-white px-2 py-0.5 rounded">
-                          Opção #{index + 1}
-                        </span>
+                  <>
+                    {opcoesVoo.map((opcao, index) => {
+                      const calc = calcularOpcaoVoo({
+                        custo: opcao.custo,
+                        margem_desejada: opcao.margem_desejada,
+                        imposto_percentual: opcao.imposto_percentual,
+                        preco_mercado: opcao.preco_mercado,
+                        modo_precificacao: opcao.modo_precificacao,
+                        desconto_mercado_percentual: opcao.desconto_mercado_percentual,
+                      })
 
-                        {/* Seletor de Status */}
-                        <Select
-                          value={opcao.status}
-                          onValueChange={(val: StatusOpcaoVoo) =>
-                            handleAtualizarOpcao(index, 'status', val)
-                          }
+                      const isMaisBarata = indiceMaisBarata === index
+
+                      return (
+                        <div
+                          key={opcao.id || index}
+                          className="border-2 border-slate-200 hover:border-sky-400 bg-white rounded-2xl p-4 sm:p-5 shadow-sm space-y-5 transition relative"
                         >
-                          <SelectTrigger
-                            className={`h-7 text-xs font-bold border ${statusCfg.badgeClass}`}
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Recomendada">⭐ Recomendada</SelectItem>
-                            <SelectItem value="Alternativa">🔄 Alternativa</SelectItem>
-                            <SelectItem value="Mais barata">💲 Mais barata</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          {/* Header da Opção */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-xs font-black bg-slate-900 text-white px-2 py-0.5 rounded">
+                                Opção #{index + 1}
+                              </span>
 
-                        <span className="text-xs font-bold text-slate-800">
-                          {opcao.descricao ||
-                            `${opcao.companhia || 'Voo'} ${opcao.origem ? `• ${opcao.origem}` : ''}`}
-                        </span>
-                      </div>
-
-                      {/* Ações da Opção: OCR, Reordenar, Duplicar, Excluir */}
-                      <div className="flex items-center gap-1 self-end sm:self-auto">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAbrirOcrParaOpcao(index)}
-                          title="Importar dados de print do voo com OCR"
-                          className="h-7 text-xs font-bold bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
-                        >
-                          <Camera className="w-3.5 h-3.5 mr-1 text-amber-600" />📸 Importar de print
-                        </Button>
-
-                        {/* Botões Reordenar ▲▼ */}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={index === 0}
-                          onClick={() => handleMoverOpcao(index, 'cima')}
-                          title="Mover para cima"
-                          className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900"
-                        >
-                          <ChevronUp className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={index === opcoesVoo.length - 1}
-                          onClick={() => handleMoverOpcao(index, 'baixo')}
-                          title="Mover para baixo"
-                          className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900"
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </Button>
-
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDuplicarOpcaoVoo(index)}
-                          title="Duplicar esta opção"
-                          className="h-7 w-7 p-0 text-slate-400 hover:text-slate-700"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </Button>
-
-                        {opcoesVoo.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoverOpcaoVoo(index)}
-                            title="Remover esta opção"
-                            className="h-7 w-7 p-0 text-rose-500 hover:text-rose-700 hover:bg-rose-50"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Campos Descritivos do Voo */}
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                      <div className="sm:col-span-5 space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700">
-                          Companhia Aérea *
-                        </Label>
-                        <Input
-                          placeholder="Ex: LATAM, Gol, Azul, American Airlines"
-                          value={opcao.companhia}
-                          onChange={(e) => handleAtualizarOpcao(index, 'companhia', e.target.value)}
-                          className="h-8 text-xs font-semibold"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-3 space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700">Nº do Voo</Label>
-                        <Input
-                          placeholder="Ex: LA8190, G3 1234"
-                          value={opcao.numero_voo || ''}
-                          onChange={(e) =>
-                            handleAtualizarOpcao(index, 'numero_voo', e.target.value)
-                          }
-                          className="h-8 text-xs"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-4 space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700">Data do Voo</Label>
-                        <Input
-                          type="date"
-                          value={opcao.data_voo || ''}
-                          onChange={(e) => handleAtualizarOpcao(index, 'data_voo', e.target.value)}
-                          className="h-8 text-xs"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-4 space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700">Origem</Label>
-                        <Input
-                          placeholder="Ex: São Paulo (GRU)"
-                          value={opcao.origem || ''}
-                          onChange={(e) => handleAtualizarOpcao(index, 'origem', e.target.value)}
-                          className="h-8 text-xs"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-4 space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700">Destino</Label>
-                        <Input
-                          placeholder="Ex: Orlando (MCO)"
-                          value={opcao.destino || ''}
-                          onChange={(e) => handleAtualizarOpcao(index, 'destino', e.target.value)}
-                          className="h-8 text-xs"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2 space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700">Partida</Label>
-                        <Input
-                          placeholder="Ex: 08:30"
-                          value={opcao.horario_partida || ''}
-                          onChange={(e) =>
-                            handleAtualizarOpcao(index, 'horario_partida', e.target.value)
-                          }
-                          className="h-8 text-xs"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2 space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700">Chegada</Label>
-                        <Input
-                          placeholder="Ex: 16:45"
-                          value={opcao.horario_chegada || ''}
-                          onChange={(e) =>
-                            handleAtualizarOpcao(index, 'horario_chegada', e.target.value)
-                          }
-                          className="h-8 text-xs"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-12 space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700">
-                          Título / Descrição Comercial (Exibido na Proposta)
-                        </Label>
-                        <Input
-                          placeholder="Ex: LATAM Direto • GRU → MCO • Bagagem inclusa"
-                          value={opcao.descricao || ''}
-                          onChange={(e) => handleAtualizarOpcao(index, 'descricao', e.target.value)}
-                          className="h-8 text-xs text-slate-700"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Precificação Independente desta Opção */}
-                    <div className="bg-slate-900 text-white rounded-xl p-4 space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
-                        <span className="text-xs font-bold text-sky-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <DollarSign className="w-4 h-4 text-sky-400" />
-                          Precificação da Opção #{index + 1}
-                        </span>
-
-                        {/* Seletor de Modo de Precificação */}
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-slate-400">Modo:</span>
-                          <div className="flex rounded-lg overflow-hidden border border-slate-700">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleAtualizarOpcao(index, 'modo_precificacao', 'margem')
-                              }
-                              className={`px-2.5 py-1 text-xs font-bold transition ${
-                                opcao.modo_precificacao === 'margem'
-                                  ? 'bg-sky-600 text-white'
-                                  : 'bg-slate-800 text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              Modo A (Margem)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleAtualizarOpcao(index, 'modo_precificacao', 'desconto_mercado')
-                              }
-                              className={`px-2.5 py-1 text-xs font-bold transition ${
-                                opcao.modo_precificacao === 'desconto_mercado'
-                                  ? 'bg-amber-600 text-white'
-                                  : 'bg-slate-800 text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              Modo B (Desc. Mercado)
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Inputs Financeiros */}
-                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                        <div className="sm:col-span-4 space-y-1">
-                          <Label className="text-[11px] font-bold text-slate-300">
-                            Custo do Voo ({moeda}) *
-                          </Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={opcao.custo}
-                            onChange={(e) =>
-                              handleAtualizarOpcao(index, 'custo', parseFloat(e.target.value) || 0)
-                            }
-                            className="h-8 text-xs bg-slate-950 border-slate-700 text-white font-bold"
-                          />
-                        </div>
-
-                        {opcao.modo_precificacao === 'margem' ? (
-                          <>
-                            <div className="sm:col-span-4 space-y-1">
-                              <div className="flex justify-between items-center">
-                                <Label className="text-[11px] font-bold text-sky-300">
-                                  Margem Desejada (%)
-                                </Label>
-                                <span className="text-xs font-black text-sky-400">
-                                  {opcao.margem_desejada}%
+                              {/* Tag Automática "Mais barata" */}
+                              {isMaisBarata && (
+                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-300 flex items-center gap-1">
+                                  💲 Mais barata
                                 </span>
-                              </div>
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.5"
-                                value={
-                                  opcao.margem_desejada !== undefined &&
-                                  opcao.margem_desejada !== null &&
-                                  !isNaN(opcao.margem_desejada)
-                                    ? opcao.margem_desejada
-                                    : ''
-                                }
-                                onChange={(e) => {
-                                  const val = e.target.value
-                                  handleAtualizarOpcao(
-                                    index,
-                                    'margem_desejada',
-                                    val === '' ? 0 : parseFloat(val) || 0,
-                                  )
-                                }}
-                                className="h-8 text-xs bg-slate-950 border-slate-700 text-white font-bold"
-                              />
+                              )}
+
+                              {/* Destaque / Observação Livre se preenchido */}
+                              {opcao.observacao && opcao.observacao.trim() && (
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                                  💬 {opcao.observacao.trim()}
+                                </span>
+                              )}
+
+                              <span className="text-xs font-bold text-slate-800">
+                                {opcao.descricao ||
+                                  `${opcao.companhia || 'Voo'} ${opcao.origem ? `• ${opcao.origem}` : ''}`}
+                              </span>
                             </div>
 
-                            <div className="sm:col-span-4 space-y-1">
-                              <Label className="text-[11px] text-slate-400">
-                                Preço de Mercado ({moeda}) - Opcional
-                              </Label>
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                placeholder="Ex: 5000.00"
-                                value={opcao.preco_mercado !== undefined ? opcao.preco_mercado : ''}
-                                onChange={(e) => {
-                                  const val = e.target.value
-                                  handleAtualizarOpcao(
-                                    index,
-                                    'preco_mercado',
-                                    val === '' ? undefined : parseFloat(val),
-                                  )
-                                }}
-                                className="h-8 text-xs bg-slate-950 border-slate-700 text-white"
-                              />
-                            </div>
+                            {/* Ações da Opção: OCR, Reordenar, Duplicar, Excluir */}
+                            <div className="flex items-center gap-1 self-end sm:self-auto">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAbrirOcrParaOpcao(index)}
+                                title="Importar dados de print do voo com OCR"
+                                className="h-7 text-xs font-bold bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
+                              >
+                                <Camera className="w-3.5 h-3.5 mr-1 text-amber-600" />📸 Importar de
+                                print
+                              </Button>
 
-                            {/* Atalhos Rápidos de Margem */}
-                            <div className="sm:col-span-12 flex items-center gap-1.5 pt-1">
-                              <span className="text-[10px] text-slate-400">Atalhos Margem:</span>
-                              {[25, 30, 35, 40, 45, 50].map((marg) => (
+                              {/* Botões Reordenar ▲▼ */}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={index === 0}
+                                onClick={() => handleMoverOpcao(index, 'cima')}
+                                title="Mover para cima"
+                                className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900"
+                              >
+                                <ChevronUp className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={index === opcoesVoo.length - 1}
+                                onClick={() => handleMoverOpcao(index, 'baixo')}
+                                title="Mover para baixo"
+                                className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900"
+                              >
+                                <ChevronDown className="w-4 h-4" />
+                              </Button>
+
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDuplicarOpcaoVoo(index)}
+                                title="Duplicar esta opção"
+                                className="h-7 w-7 p-0 text-slate-400 hover:text-slate-700"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </Button>
+
+                              {opcoesVoo.length > 1 && (
                                 <Button
-                                  key={marg}
                                   type="button"
+                                  variant="ghost"
                                   size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    handleAtualizarOpcao(index, 'margem_desejada', marg)
-                                  }
-                                  className={`h-6 px-1.5 text-[10px] font-bold ${
-                                    opcao.margem_desejada === marg
-                                      ? 'bg-sky-600 text-white border-sky-400'
-                                      : 'bg-slate-800 text-slate-300 border-slate-700'
-                                  }`}
+                                  onClick={() => handleRemoverOpcaoVoo(index)}
+                                  title="Remover esta opção"
+                                  className="h-7 w-7 p-0 text-rose-500 hover:text-rose-700 hover:bg-rose-50"
                                 >
-                                  {marg}%
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
-                              ))}
+                              )}
                             </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="sm:col-span-4 space-y-1">
-                              <Label className="text-[11px] font-bold text-amber-300">
-                                Preço de Mercado ({moeda}) *
+                          </div>
+
+                          {/* Campos Descritivos do Voo */}
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                            <div className="sm:col-span-5 space-y-1">
+                              <Label className="text-[11px] font-bold text-slate-700">
+                                Companhia Aérea *
                               </Label>
                               <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                required
-                                placeholder="Ex: 6000.00"
-                                value={opcao.preco_mercado !== undefined ? opcao.preco_mercado : ''}
-                                onChange={(e) => {
-                                  const val = e.target.value
-                                  handleAtualizarOpcao(
-                                    index,
-                                    'preco_mercado',
-                                    val === '' ? undefined : parseFloat(val),
-                                  )
-                                }}
-                                className="h-8 text-xs bg-slate-950 border-amber-600 text-white font-bold"
-                              />
-                            </div>
-
-                            <div className="sm:col-span-4 space-y-1">
-                              <div className="flex justify-between items-center">
-                                <Label className="text-[11px] font-bold text-amber-300">
-                                  Desconto % que vou dar *
-                                </Label>
-                                <span className="text-xs font-black text-amber-400">
-                                  {opcao.desconto_mercado_percentual}% OFF
-                                </span>
-                              </div>
-                              <Input
-                                type="number"
-                                min="0"
-                                max="90"
-                                step="0.5"
-                                value={opcao.desconto_mercado_percentual || 10}
+                                placeholder="Ex: LATAM, Gol, Azul, American Airlines"
+                                value={opcao.companhia}
                                 onChange={(e) =>
-                                  handleAtualizarOpcao(
-                                    index,
-                                    'desconto_mercado_percentual',
-                                    parseFloat(e.target.value) || 0,
-                                  )
+                                  handleAtualizarOpcao(index, 'companhia', e.target.value)
                                 }
-                                className="h-8 text-xs bg-slate-950 border-amber-600 text-white font-bold"
+                                className="h-8 text-xs font-semibold"
                               />
                             </div>
 
-                            {/* Atalhos Rápidos de Desconto */}
-                            <div className="sm:col-span-12 flex items-center gap-1.5 pt-1">
-                              <span className="text-[10px] text-amber-300/80">
-                                Atalhos Desconto:
+                            <div className="sm:col-span-3 space-y-1">
+                              <Label className="text-[11px] font-bold text-slate-700">
+                                Nº do Voo
+                              </Label>
+                              <Input
+                                placeholder="Ex: LA8190, G3 1234"
+                                value={opcao.numero_voo || ''}
+                                onChange={(e) =>
+                                  handleAtualizarOpcao(index, 'numero_voo', e.target.value)
+                                }
+                                className="h-8 text-xs"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-4 space-y-1">
+                              <Label className="text-[11px] font-bold text-slate-700">
+                                Data do Voo
+                              </Label>
+                              <Input
+                                type="date"
+                                value={opcao.data_voo || ''}
+                                onChange={(e) =>
+                                  handleAtualizarOpcao(index, 'data_voo', e.target.value)
+                                }
+                                className="h-8 text-xs"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-4 space-y-1">
+                              <Label className="text-[11px] font-bold text-slate-700">Origem</Label>
+                              <Input
+                                placeholder="Ex: São Paulo (GRU)"
+                                value={opcao.origem || ''}
+                                onChange={(e) =>
+                                  handleAtualizarOpcao(index, 'origem', e.target.value)
+                                }
+                                className="h-8 text-xs"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-4 space-y-1">
+                              <Label className="text-[11px] font-bold text-slate-700">
+                                Destino
+                              </Label>
+                              <Input
+                                placeholder="Ex: Orlando (MCO)"
+                                value={opcao.destino || ''}
+                                onChange={(e) =>
+                                  handleAtualizarOpcao(index, 'destino', e.target.value)
+                                }
+                                className="h-8 text-xs"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-2 space-y-1">
+                              <Label className="text-[11px] font-bold text-slate-700">
+                                Partida
+                              </Label>
+                              <Input
+                                placeholder="Ex: 08:30"
+                                value={opcao.horario_partida || ''}
+                                onChange={(e) =>
+                                  handleAtualizarOpcao(index, 'horario_partida', e.target.value)
+                                }
+                                className="h-8 text-xs"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-2 space-y-1">
+                              <Label className="text-[11px] font-bold text-slate-700">
+                                Chegada
+                              </Label>
+                              <Input
+                                placeholder="Ex: 16:45"
+                                value={opcao.horario_chegada || ''}
+                                onChange={(e) =>
+                                  handleAtualizarOpcao(index, 'horario_chegada', e.target.value)
+                                }
+                                className="h-8 text-xs"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-12 space-y-1">
+                              <Label className="text-[11px] font-bold text-slate-700">
+                                Título / Descrição Comercial (Exibido na Proposta)
+                              </Label>
+                              <Input
+                                placeholder="Ex: LATAM Direto • GRU → MCO • Bagagem inclusa"
+                                value={opcao.descricao || ''}
+                                onChange={(e) =>
+                                  handleAtualizarOpcao(index, 'descricao', e.target.value)
+                                }
+                                className="h-8 text-xs text-slate-700"
+                              />
+                            </div>
+
+                            {/* Campo de Texto Livre Opcional (Observação / Destaque) */}
+                            <div className="sm:col-span-12 space-y-1">
+                              <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                                <span>Observação / Destaque Livre (Opcional)</span>
+                                <span className="text-[10px] text-slate-400 font-normal">
+                                  — ex: melhor horário, sem conexão, bagagem despachada
+                                </span>
+                              </Label>
+                              <Input
+                                placeholder="Ex: melhor horário / sem conexão / voo noturno"
+                                value={opcao.observacao || ''}
+                                onChange={(e) =>
+                                  handleAtualizarOpcao(index, 'observacao', e.target.value)
+                                }
+                                className="h-8 text-xs text-slate-800 bg-amber-50/30 border-amber-200/70 focus:border-amber-400"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Precificação Independente desta Opção */}
+                          <div className="bg-slate-900 text-white rounded-xl p-4 space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                              <span className="text-xs font-bold text-sky-300 uppercase tracking-wider flex items-center gap-1.5">
+                                <DollarSign className="w-4 h-4 text-sky-400" />
+                                Precificação da Opção #{index + 1}
                               </span>
-                              {[5, 8, 10, 12, 15].map((desc) => (
-                                <Button
-                                  key={desc}
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    handleAtualizarOpcao(index, 'desconto_mercado_percentual', desc)
+
+                              {/* Seletor de Modo de Precificação */}
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-slate-400">Modo:</span>
+                                <div className="flex rounded-lg overflow-hidden border border-slate-700">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleAtualizarOpcao(index, 'modo_precificacao', 'margem')
+                                    }
+                                    className={`px-2.5 py-1 text-xs font-bold transition ${
+                                      opcao.modo_precificacao === 'margem'
+                                        ? 'bg-sky-600 text-white'
+                                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                                    }`}
+                                  >
+                                    Modo A (Margem)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleAtualizarOpcao(
+                                        index,
+                                        'modo_precificacao',
+                                        'desconto_mercado',
+                                      )
+                                    }
+                                    className={`px-2.5 py-1 text-xs font-bold transition ${
+                                      opcao.modo_precificacao === 'desconto_mercado'
+                                        ? 'bg-amber-600 text-white'
+                                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                                    }`}
+                                  >
+                                    Modo B (Desc. Mercado)
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Inputs Financeiros */}
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                              <div className="sm:col-span-4 space-y-1">
+                                <Label className="text-[11px] font-bold text-slate-300">
+                                  Custo do Voo ({moeda}) *
+                                </Label>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={opcao.custo}
+                                  onChange={(e) =>
+                                    handleAtualizarOpcao(
+                                      index,
+                                      'custo',
+                                      parseFloat(e.target.value) || 0,
+                                    )
                                   }
-                                  className={`h-6 px-1.5 text-[10px] font-bold ${
-                                    opcao.desconto_mercado_percentual === desc
-                                      ? 'bg-amber-600 text-white border-amber-400'
-                                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                                  className="h-8 text-xs bg-slate-950 border-slate-700 text-white font-bold"
+                                />
+                              </div>
+
+                              {opcao.modo_precificacao === 'margem' ? (
+                                <>
+                                  <div className="sm:col-span-4 space-y-1">
+                                    <div className="flex justify-between items-center">
+                                      <Label className="text-[11px] font-bold text-sky-300">
+                                        Margem Desejada (%)
+                                      </Label>
+                                      <span className="text-xs font-black text-sky-400">
+                                        {opcao.margem_desejada}%
+                                      </span>
+                                    </div>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.5"
+                                      value={
+                                        opcao.margem_desejada !== undefined &&
+                                        opcao.margem_desejada !== null &&
+                                        !isNaN(opcao.margem_desejada)
+                                          ? opcao.margem_desejada
+                                          : ''
+                                      }
+                                      onChange={(e) => {
+                                        const val = e.target.value
+                                        handleAtualizarOpcao(
+                                          index,
+                                          'margem_desejada',
+                                          val === '' ? 0 : parseFloat(val) || 0,
+                                        )
+                                      }}
+                                      className="h-8 text-xs bg-slate-950 border-slate-700 text-white font-bold"
+                                    />
+                                  </div>
+
+                                  <div className="sm:col-span-4 space-y-1">
+                                    <Label className="text-[11px] text-slate-400">
+                                      Preço de Mercado ({moeda}) - Opcional
+                                    </Label>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="Ex: 5000.00"
+                                      value={
+                                        opcao.preco_mercado !== undefined ? opcao.preco_mercado : ''
+                                      }
+                                      onChange={(e) => {
+                                        const val = e.target.value
+                                        handleAtualizarOpcao(
+                                          index,
+                                          'preco_mercado',
+                                          val === '' ? undefined : parseFloat(val),
+                                        )
+                                      }}
+                                      className="h-8 text-xs bg-slate-950 border-slate-700 text-white"
+                                    />
+                                  </div>
+
+                                  {/* Atalhos Rápidos de Margem */}
+                                  <div className="sm:col-span-12 flex items-center gap-1.5 pt-1">
+                                    <span className="text-[10px] text-slate-400">
+                                      Atalhos Margem:
+                                    </span>
+                                    {[25, 30, 35, 40, 45, 50].map((marg) => (
+                                      <Button
+                                        key={marg}
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          handleAtualizarOpcao(index, 'margem_desejada', marg)
+                                        }
+                                        className={`h-6 px-1.5 text-[10px] font-bold ${
+                                          opcao.margem_desejada === marg
+                                            ? 'bg-sky-600 text-white border-sky-400'
+                                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                                        }`}
+                                      >
+                                        {marg}%
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="sm:col-span-4 space-y-1">
+                                    <Label className="text-[11px] font-bold text-amber-300">
+                                      Preço de Mercado ({moeda}) *
+                                    </Label>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      required
+                                      placeholder="Ex: 6000.00"
+                                      value={
+                                        opcao.preco_mercado !== undefined ? opcao.preco_mercado : ''
+                                      }
+                                      onChange={(e) => {
+                                        const val = e.target.value
+                                        handleAtualizarOpcao(
+                                          index,
+                                          'preco_mercado',
+                                          val === '' ? undefined : parseFloat(val),
+                                        )
+                                      }}
+                                      className="h-8 text-xs bg-slate-950 border-amber-600 text-white font-bold"
+                                    />
+                                  </div>
+
+                                  <div className="sm:col-span-4 space-y-1">
+                                    <div className="flex justify-between items-center">
+                                      <Label className="text-[11px] font-bold text-amber-300">
+                                        Desconto % que vou dar *
+                                      </Label>
+                                      <span className="text-xs font-black text-amber-400">
+                                        {opcao.desconto_mercado_percentual}% OFF
+                                      </span>
+                                    </div>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max="90"
+                                      step="0.5"
+                                      value={opcao.desconto_mercado_percentual || 10}
+                                      onChange={(e) =>
+                                        handleAtualizarOpcao(
+                                          index,
+                                          'desconto_mercado_percentual',
+                                          parseFloat(e.target.value) || 0,
+                                        )
+                                      }
+                                      className="h-8 text-xs bg-slate-950 border-amber-600 text-white font-bold"
+                                    />
+                                  </div>
+
+                                  {/* Atalhos Rápidos de Desconto */}
+                                  <div className="sm:col-span-12 flex items-center gap-1.5 pt-1">
+                                    <span className="text-[10px] text-amber-300/80">
+                                      Atalhos Desconto:
+                                    </span>
+                                    {[5, 8, 10, 12, 15].map((desc) => (
+                                      <Button
+                                        key={desc}
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          handleAtualizarOpcao(
+                                            index,
+                                            'desconto_mercado_percentual',
+                                            desc,
+                                          )
+                                        }
+                                        className={`h-6 px-1.5 text-[10px] font-bold ${
+                                          opcao.desconto_mercado_percentual === desc
+                                            ? 'bg-amber-600 text-white border-amber-400'
+                                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                                        }`}
+                                      >
+                                        {desc}%
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+
+                            {/* CARD INTERNO: DECISÃO INTERNA DA OPÇÃO (MODO A VS MODO B) — UM POR OPÇÃO */}
+                            <div className="pt-3 border-t border-slate-800 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                  Decisão Interna (Opção #{index + 1})
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-400">
+                                  Preço Final: {formatarMoeda(calc.precoFinal, moeda)}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                {/* Cenário A */}
+                                <div
+                                  onClick={() =>
+                                    handleAtualizarOpcao(index, 'modo_precificacao', 'margem')
+                                  }
+                                  className={`p-2.5 rounded-lg border cursor-pointer transition ${
+                                    opcao.modo_precificacao === 'margem'
+                                      ? 'bg-sky-950/80 border-sky-400 ring-1 ring-sky-400'
+                                      : 'bg-slate-950/40 border-slate-800 opacity-60'
                                   }`}
                                 >
-                                  {desc}%
-                                </Button>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
+                                  <div className="flex justify-between font-bold text-white text-[11px] pb-1 border-b border-slate-800">
+                                    <span>Modo A (Margem)</span>
+                                    <span>{formatarMoeda(calc.cenarioA.precoFinal, moeda)}</span>
+                                  </div>
+                                  <div className="mt-1 space-y-0.5 text-[10.5px]">
+                                    <div className="flex justify-between text-emerald-400">
+                                      <span>Margem Bruta:</span>
+                                      <span>
+                                        {calc.cenarioA.margemBrutaPercent.toFixed(1)}% (
+                                        {formatarMoeda(calc.cenarioA.lucroBruto, moeda)})
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between text-emerald-300">
+                                      <span>Margem Líquida:</span>
+                                      <span>
+                                        {calc.cenarioA.margemLiquidaPercent.toFixed(1)}% (
+                                        {formatarMoeda(calc.cenarioA.lucroLiquido, moeda)})
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
 
-                      {/* CARD INTERNO: DECISÃO INTERNA DA OPÇÃO (MODO A VS MODO B) — UM POR OPÇÃO */}
-                      <div className="pt-3 border-t border-slate-800 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
-                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                            Decisão Interna (Opção #{index + 1})
-                          </span>
-                          <span className="text-[10px] font-bold text-slate-400">
-                            Preço Final: {formatarMoeda(calc.precoFinal, moeda)}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                          {/* Cenário A */}
-                          <div
-                            onClick={() =>
-                              handleAtualizarOpcao(index, 'modo_precificacao', 'margem')
-                            }
-                            className={`p-2.5 rounded-lg border cursor-pointer transition ${
-                              opcao.modo_precificacao === 'margem'
-                                ? 'bg-sky-950/80 border-sky-400 ring-1 ring-sky-400'
-                                : 'bg-slate-950/40 border-slate-800 opacity-60'
-                            }`}
-                          >
-                            <div className="flex justify-between font-bold text-white text-[11px] pb-1 border-b border-slate-800">
-                              <span>Modo A (Margem)</span>
-                              <span>{formatarMoeda(calc.cenarioA.precoFinal, moeda)}</span>
-                            </div>
-                            <div className="mt-1 space-y-0.5 text-[10.5px]">
-                              <div className="flex justify-between text-emerald-400">
-                                <span>Margem Bruta:</span>
-                                <span>
-                                  {calc.cenarioA.margemBrutaPercent.toFixed(1)}% (
-                                  {formatarMoeda(calc.cenarioA.lucroBruto, moeda)})
-                                </span>
-                              </div>
-                              <div className="flex justify-between text-emerald-300">
-                                <span>Margem Líquida:</span>
-                                <span>
-                                  {calc.cenarioA.margemLiquidaPercent.toFixed(1)}% (
-                                  {formatarMoeda(calc.cenarioA.lucroLiquido, moeda)})
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Cenário B */}
-                          <div
-                            onClick={() =>
-                              handleAtualizarOpcao(index, 'modo_precificacao', 'desconto_mercado')
-                            }
-                            className={`p-2.5 rounded-lg border cursor-pointer transition ${
-                              opcao.modo_precificacao === 'desconto_mercado'
-                                ? 'bg-amber-950/80 border-amber-400 ring-1 ring-amber-400'
-                                : 'bg-slate-950/40 border-slate-800 opacity-60'
-                            }`}
-                          >
-                            <div className="flex justify-between font-bold text-white text-[11px] pb-1 border-b border-slate-800">
-                              <span>Modo B (Desc. Mercado)</span>
-                              <span>
-                                {calc.cenarioB.valido
-                                  ? formatarMoeda(calc.cenarioB.precoFinal, moeda)
-                                  : 'Defina mercado'}
-                              </span>
-                            </div>
-                            <div className="mt-1 space-y-0.5 text-[10.5px]">
-                              <div className="flex justify-between text-amber-300">
-                                <span>Desconto:</span>
-                                <span>{opcao.desconto_mercado_percentual || 10}% OFF</span>
-                              </div>
-                              <div className="flex justify-between text-emerald-300">
-                                <span>Margem Real:</span>
-                                <span>
-                                  {calc.cenarioB.valido
-                                    ? `${calc.cenarioB.margemRealResultantePercent.toFixed(1)}%`
-                                    : '-'}
-                                </span>
+                                {/* Cenário B */}
+                                <div
+                                  onClick={() =>
+                                    handleAtualizarOpcao(
+                                      index,
+                                      'modo_precificacao',
+                                      'desconto_mercado',
+                                    )
+                                  }
+                                  className={`p-2.5 rounded-lg border cursor-pointer transition ${
+                                    opcao.modo_precificacao === 'desconto_mercado'
+                                      ? 'bg-amber-950/80 border-amber-400 ring-1 ring-amber-400'
+                                      : 'bg-slate-950/40 border-slate-800 opacity-60'
+                                  }`}
+                                >
+                                  <div className="flex justify-between font-bold text-white text-[11px] pb-1 border-b border-slate-800">
+                                    <span>Modo B (Desc. Mercado)</span>
+                                    <span>
+                                      {calc.cenarioB.valido
+                                        ? formatarMoeda(calc.cenarioB.precoFinal, moeda)
+                                        : 'Defina mercado'}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 space-y-0.5 text-[10.5px]">
+                                    <div className="flex justify-between text-amber-300">
+                                      <span>Desconto:</span>
+                                      <span>{opcao.desconto_mercado_percentual || 10}% OFF</span>
+                                    </div>
+                                    <div className="flex justify-between text-emerald-300">
+                                      <span>Margem Real:</span>
+                                      <span>
+                                        {calc.cenarioB.valido
+                                          ? `${calc.cenarioB.margemRealResultantePercent.toFixed(1)}%`
+                                          : '-'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  </div>
+                      )
+                    })}
+                  </>
                 )
-              })}
+              })()}
 
               <Button
                 type="button"
@@ -1553,73 +1612,88 @@ export function FormCotacao({
 
                 {/* Lista de Resumo de Cada Opção */}
                 <div className="space-y-3">
-                  {opcoesVoo.map((op, idx) => {
-                    const c = calcularOpcaoVoo({
-                      custo: op.custo,
-                      margem_desejada: op.margem_desejada,
-                      imposto_percentual: op.imposto_percentual,
-                      preco_mercado: op.preco_mercado,
-                      modo_precificacao: op.modo_precificacao,
-                      desconto_mercado_percentual: op.desconto_mercado_percentual,
-                    })
-
-                    const valorPorPessoa = c.precoFinal / (numPassageiros || 1)
-                    const statusCfg =
-                      STATUS_OPCAO_VOO_CONFIG[op.status] || STATUS_OPCAO_VOO_CONFIG.Recomendada
-
+                  {(() => {
+                    const indiceMaisBarataSidebar = encontrarIndiceOpcaoMaisBarata(opcoesVoo)
                     return (
-                      <div
-                        key={op.id || idx}
-                        className="bg-slate-800/90 border border-slate-700 rounded-xl p-3.5 space-y-2"
-                      >
-                        <div className="flex items-center justify-between pb-1.5 border-b border-slate-700/80">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={`text-[10px] font-black px-2 py-0.5 rounded ${statusCfg.badgeBg}`}
+                      <>
+                        {opcoesVoo.map((op, idx) => {
+                          const c = calcularOpcaoVoo({
+                            custo: op.custo,
+                            margem_desejada: op.margem_desejada,
+                            imposto_percentual: op.imposto_percentual,
+                            preco_mercado: op.preco_mercado,
+                            modo_precificacao: op.modo_precificacao,
+                            desconto_mercado_percentual: op.desconto_mercado_percentual,
+                          })
+
+                          const valorPorPessoa = c.precoFinal / (numPassageiros || 1)
+                          const isMaisBarata = indiceMaisBarataSidebar === idx
+
+                          return (
+                            <div
+                              key={op.id || idx}
+                              className="bg-slate-800/90 border border-slate-700 rounded-xl p-3.5 space-y-2"
                             >
-                              {op.status}
-                            </span>
-                            <span className="text-xs font-bold text-white truncate max-w-[140px]">
-                              {op.companhia || `Opção #${idx + 1}`}
-                            </span>
-                          </div>
-                          <span className="text-xs text-slate-400 font-mono">
-                            {op.modo_precificacao === 'desconto_mercado'
-                              ? `${op.desconto_mercado_percentual || 10}% OFF`
-                              : `${op.margem_desejada}% marg`}
-                          </span>
-                        </div>
+                              <div className="flex items-center justify-between pb-1.5 border-b border-slate-700/80">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono text-[10px] font-bold bg-slate-900 text-slate-300 px-1.5 py-0.5 rounded">
+                                    #{idx + 1}
+                                  </span>
+                                  {isMaisBarata && (
+                                    <span className="text-[10px] font-black px-2 py-0.5 rounded bg-emerald-600 text-white">
+                                      Mais barata
+                                    </span>
+                                  )}
+                                  <span className="text-xs font-bold text-white truncate max-w-[130px]">
+                                    {op.companhia || `Opção #${idx + 1}`}
+                                  </span>
+                                </div>
+                                <span className="text-xs text-slate-400 font-mono">
+                                  {op.modo_precificacao === 'desconto_mercado'
+                                    ? `${op.desconto_mercado_percentual || 10}% OFF`
+                                    : `${op.margem_desejada}% marg`}
+                                </span>
+                              </div>
 
-                        <div className="flex justify-between items-baseline pt-1">
-                          <div>
-                            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
-                              Preço Final
-                            </span>
-                            <span className="text-lg font-black text-white">
-                              {formatarMoeda(c.precoFinal, moeda)}
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-[10px] text-slate-400 block">
-                              Por adulto ({numPassageiros}x)
-                            </span>
-                            <span className="text-xs font-bold text-sky-300">
-                              {formatarMoeda(valorPorPessoa, moeda)}
-                            </span>
-                          </div>
-                        </div>
+                              {op.observacao && op.observacao.trim() && (
+                                <div className="text-[11px] text-amber-300/90 italic truncate">
+                                  💬 {op.observacao.trim()}
+                                </div>
+                              )}
 
-                        <div className="pt-1.5 border-t border-slate-700/60 flex justify-between text-[11px] text-emerald-400">
-                          <span>Lucro Líquido Real:</span>
-                          <span className="font-bold">
-                            + {formatarMoeda(c.lucroLiquido, moeda)} (
-                            {c.margemLiquidaPercent.toFixed(1)}
-                            %)
-                          </span>
-                        </div>
-                      </div>
+                              <div className="flex justify-between items-baseline pt-1">
+                                <div>
+                                  <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
+                                    Preço Final
+                                  </span>
+                                  <span className="text-lg font-black text-white">
+                                    {formatarMoeda(c.precoFinal, moeda)}
+                                  </span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[10px] text-slate-400 block">
+                                    Por adulto ({numPassageiros}x)
+                                  </span>
+                                  <span className="text-xs font-bold text-sky-300">
+                                    {formatarMoeda(valorPorPessoa, moeda)}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="pt-1.5 border-t border-slate-700/60 flex justify-between text-[11px] text-emerald-400">
+                                <span>Lucro Líquido Real:</span>
+                                <span className="font-bold">
+                                  + {formatarMoeda(c.lucroLiquido, moeda)} (
+                                  {c.margemLiquidaPercent.toFixed(1)}
+                                  %)
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </>
                     )
-                  })}
+                  })()}
                 </div>
 
                 {/* Botões de Ação */}

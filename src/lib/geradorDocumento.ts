@@ -1,11 +1,11 @@
+import { Cotacao, ConfiguracoesAgencia, CATEGORIAS_SERVICO, OpcaoVoo } from '@/types/cotacao'
 import {
-  Cotacao,
-  ConfiguracoesAgencia,
-  CATEGORIAS_SERVICO,
-  OpcaoVoo,
-  STATUS_OPCAO_VOO_CONFIG,
-} from '@/types/cotacao'
-import { formatarMoeda, formatarData, calcularDuracaoDias, calcularOpcaoVoo } from './calculos'
+  formatarMoeda,
+  formatarData,
+  calcularDuracaoDias,
+  calcularOpcaoVoo,
+  encontrarIndiceOpcaoMaisBarata,
+} from './calculos'
 
 export function gerarHTMLDocumentoProposta(
   cotacao: Cotacao,
@@ -29,7 +29,7 @@ export function gerarHTMLDocumentoProposta(
             descricao: 'Opção Principal de Voo',
             origem: 'São Paulo',
             destino: cotacao.destino || '',
-            status: 'Recomendada',
+            observacao: '',
             custo: cotacao.valor_custo_total || 0,
             margem_desejada: isNaN(margemFallback) ? 15 : margemFallback,
             imposto_percentual: agencia.imposto_lucro_padrao ?? 6,
@@ -51,6 +51,8 @@ export function gerarHTMLDocumentoProposta(
         <span>${agencia.nome_agencia || 'AGÊNCIA DE VIAGENS'}</span>
        </div>`
 
+  const indiceMaisBarata = encontrarIndiceOpcaoMaisBarata(opcoesVoo)
+
   // Cards de Opções de Voo Independentes (NÃO SOMAR VALORES)
   const opcoesVooCards = opcoesVoo
     .map((op, idx) => {
@@ -64,24 +66,37 @@ export function gerarHTMLDocumentoProposta(
       })
 
       const valorPorPessoa = calc.precoFinal / numPassageiros
-      const isRecomendada = op.status === 'Recomendada'
-      const isMaisBarata = op.status === 'Mais barata'
+      const isMaisBarata = indiceMaisBarata === idx
+      const temObservacao = Boolean(op.observacao && op.observacao.trim())
 
-      let badgeBg = '#0369a1'
-      let badgeLabel = op.status
-      if (isRecomendada) {
-        badgeBg = '#059669'
-      } else if (isMaisBarata) {
-        badgeBg = '#d97706'
-      }
+      // Tags HTML: badge "Mais barata" e/ou texto de observação ao lado
+      const tagsHtml = `
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
+          <span style="display: inline-block; background: #0f172a; color: #ffffff; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px;">
+            Opção ${idx + 1}
+          </span>
+          ${
+            isMaisBarata
+              ? `<span style="display: inline-block; background: #059669; color: #ffffff; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 10px; border-radius: 6px;">
+                  Mais barata
+                </span>`
+              : ''
+          }
+          ${
+            temObservacao
+              ? `<span style="display: inline-block; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 6px;">
+                  ${op.observacao?.trim()}
+                </span>`
+              : ''
+          }
+        </div>
+      `
 
       return `
-      <div style="background: #ffffff; border: 2px solid ${isRecomendada ? '#059669' : '#cbd5e1'}; border-radius: 10px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); page-break-inside: avoid;">
+      <div style="background: #ffffff; border: 2px solid ${isMaisBarata ? '#059669' : '#cbd5e1'}; border-radius: 10px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); page-break-inside: avoid;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;">
           <div>
-            <span style="display: inline-block; background: ${badgeBg}; color: #ffffff; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 10px; border-radius: 6px; margin-bottom: 4px;">
-              ${badgeLabel}
-            </span>
+            ${tagsHtml}
             <div style="font-size: 15px; font-weight: 800; color: #0f172a;">
               ${op.descricao || `${op.companhia} • ${op.origem} → ${op.destino}`}
             </div>
