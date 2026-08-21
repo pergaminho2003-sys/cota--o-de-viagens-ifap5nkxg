@@ -13,9 +13,21 @@ import {
   calcularOpcaoVoo,
   encontrarIndiceOpcaoMaisBarata,
 } from '@/lib/calculos'
-import { imprimirOuSalvarPDF } from '@/lib/geradorDocumento'
+import {
+  imprimirOuSalvarPDF,
+  baixarArquivoHTMLProposta,
+  abrirPreviaHTMLProposta,
+} from '@/lib/geradorDocumento'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Printer,
   ArrowLeft,
@@ -31,6 +43,11 @@ import {
   Plane,
   Layers,
   ArrowRight,
+  FileCode,
+  Download,
+  Share2,
+  ChevronDown,
+  ExternalLink,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -85,6 +102,25 @@ export function VisualizacaoCotacao({
 
   const handleGerarPDF = () => {
     imprimirOuSalvarPDF(cotacao, configAgencia)
+  }
+
+  const handleBaixarHTML = () => {
+    try {
+      baixarArquivoHTMLProposta(cotacao, configAgencia)
+      toast.success('Arquivo HTML gerado com sucesso! Pronto para envio no WhatsApp.')
+    } catch (err) {
+      console.error(err)
+      toast.error('Erro ao gerar arquivo HTML.')
+    }
+  }
+
+  const handleAbrirPreviaHTML = () => {
+    try {
+      abrirPreviaHTMLProposta(cotacao, configAgencia)
+    } catch (err) {
+      console.error(err)
+      toast.error('Erro ao abrir prévia da versão HTML.')
+    }
   }
 
   const indiceMaisBarata = encontrarIndiceOpcaoMaisBarata(opcoesVoo)
@@ -169,14 +205,49 @@ Qualquer dúvida estamos à disposição!`
             Copiar p/ WhatsApp
           </Button>
 
+          {/* Botão Gerar Versão HTML (Destaque ao lado do PDF) */}
           <Button
             size="sm"
-            onClick={handleGerarPDF}
-            className="bg-sky-900 hover:bg-sky-950 text-white font-bold shadow-sm"
+            onClick={handleBaixarHTML}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm border border-emerald-500"
+            title="Gera um arquivo HTML autocontido com botões interativos para enviar via WhatsApp"
           >
-            <Printer className="w-4 h-4 mr-1.5" />
-            Imprimir / Salvar PDF
+            <FileCode className="w-4 h-4 mr-1.5" />
+            Gerar versão HTML
           </Button>
+
+          {/* Menu de Exportação Adicional com PDF e Opções */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                className="bg-sky-900 hover:bg-sky-950 text-white font-bold shadow-sm"
+              >
+                <Printer className="w-4 h-4 mr-1.5" />
+                Exportar / PDF
+                <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="text-xs">Opções de Exportação</DropdownMenuLabel>
+              <DropdownMenuItem onClick={handleGerarPDF} className="cursor-pointer">
+                <Printer className="w-4 h-4 mr-2 text-sky-700" />
+                <span>Imprimir / Salvar PDF</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleBaixarHTML} className="cursor-pointer">
+                <Download className="w-4 h-4 mr-2 text-emerald-600" />
+                <div>
+                  <div className="font-semibold text-xs">Baixar Arquivo HTML</div>
+                  <div className="text-[10px] text-slate-500">Ideal para WhatsApp / Celular</div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleAbrirPreviaHTML} className="cursor-pointer">
+                <ExternalLink className="w-4 h-4 mr-2 text-slate-500" />
+                <span className="text-xs">Testar versão HTML no navegador</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

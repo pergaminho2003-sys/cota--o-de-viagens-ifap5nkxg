@@ -11,6 +11,7 @@ import {
   STATUS_OPCAO_VOO_CONFIG,
 } from '@/types/cotacao'
 import { calcularOpcaoVoo, encontrarIndiceOpcaoMaisBarata, formatarMoeda } from '@/lib/calculos'
+import { baixarArquivoHTMLProposta } from '@/lib/geradorDocumento'
 import { ModalImportarPrint } from '@/components/ModalImportarPrint'
 import { DadosVooExtraidos } from '@/lib/ocrVoo'
 import { Button } from '@/components/ui/button'
@@ -56,6 +57,7 @@ import {
   ChevronRight,
   Clock,
   ArrowRight,
+  FileCode,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -470,20 +472,40 @@ export function FormCotacao({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              if (!clienteNome.trim() || !destino.trim()) {
+                toast.error('Preencha ao menos o nome do cliente e destino para gerar o HTML.')
+                return
+              }
+              const cot = montarObjetoCotacao()
+              baixarArquivoHTMLProposta(cot, configAgencia)
+              toast.success('Arquivo HTML gerado para envio no WhatsApp!')
+            }}
+            className="flex-1 sm:flex-none border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-semibold text-xs"
+            title="Gera a proposta em formato HTML para WhatsApp"
+          >
+            <FileCode className="w-4 h-4 mr-1.5 text-emerald-600" />
+            Exportar HTML
+          </Button>
+
           <Button
             type="button"
             variant="outline"
             onClick={handlePrevisualizar}
-            className="flex-1 sm:flex-none border-sky-300 text-sky-800 bg-sky-50/70 hover:bg-sky-100 font-semibold"
+            className="flex-1 sm:flex-none border-sky-300 text-sky-800 bg-sky-50/70 hover:bg-sky-100 font-semibold text-xs"
           >
             <Eye className="w-4 h-4 mr-1.5 text-sky-600" />
             Visualizar / PDF
           </Button>
+
           <Button
             type="submit"
             disabled={salvando}
-            className="flex-1 sm:flex-none bg-sky-800 hover:bg-sky-900 text-white font-bold shadow-sm"
+            className="flex-1 sm:flex-none bg-sky-800 hover:bg-sky-900 text-white font-bold shadow-sm text-xs"
           >
             <Save className="w-4 h-4 mr-1.5" />
             {salvando ? 'Salvando...' : 'Salvar Cotação'}

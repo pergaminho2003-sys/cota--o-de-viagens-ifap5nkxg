@@ -10,7 +10,11 @@ import { cotacoesService, configAgenciaService, opcoesVooService } from '@/servi
 import { FormCotacao } from '@/components/FormCotacao'
 import { VisualizacaoCotacao } from '@/components/VisualizacaoCotacao'
 import { DialogConfigAgencia } from '@/components/DialogConfigAgencia'
-import { imprimirOuSalvarPDF } from '@/lib/geradorDocumento'
+import {
+  imprimirOuSalvarPDF,
+  baixarArquivoHTMLProposta,
+  abrirPreviaHTMLProposta,
+} from '@/lib/geradorDocumento'
 import { formatarMoeda, formatarData } from '@/lib/calculos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,6 +34,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Plane,
   Plus,
@@ -53,6 +65,10 @@ import {
   FileSpreadsheet,
   ArrowUpDown,
   Compass,
+  FileCode,
+  Download,
+  ExternalLink,
+  ChevronDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -778,15 +794,56 @@ export default function Index() {
                           <Copy className="w-3.5 h-3.5" />
                         </Button>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => imprimirOuSalvarPDF(cotacao, configAgencia)}
-                          title="Imprimir / PDF Direto"
-                          className="h-8 w-8 p-0 text-slate-500 hover:text-sky-700"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                        </Button>
+                        {/* Menu de Exportação Rápida (PDF ou HTML) */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              title="Exportar Proposta (PDF ou HTML)"
+                              className="h-8 px-2 text-xs text-slate-700 hover:bg-slate-50 border-slate-300"
+                            >
+                              <Printer className="w-3.5 h-3.5 mr-1 text-slate-600" />
+                              Exportar
+                              <ChevronDown className="w-3 h-3 ml-0.5 text-slate-400" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuLabel className="text-xs">
+                              Exportar Proposta
+                            </DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() => imprimirOuSalvarPDF(cotacao, configAgencia)}
+                              className="cursor-pointer text-xs"
+                            >
+                              <Printer className="w-3.5 h-3.5 mr-2 text-sky-700" />
+                              <span>Imprimir / PDF</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => {
+                                baixarArquivoHTMLProposta(cotacao, configAgencia)
+                                toast.success('HTML baixado! Pronto para enviar no WhatsApp.')
+                              }}
+                              className="cursor-pointer text-xs"
+                            >
+                              <FileCode className="w-3.5 h-3.5 mr-2 text-emerald-600" />
+                              <div>
+                                <div className="font-semibold">Gerar Versão HTML</div>
+                                <div className="text-[10px] text-slate-500">
+                                  Para envio no WhatsApp
+                                </div>
+                              </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => abrirPreviaHTMLProposta(cotacao, configAgencia)}
+                              className="cursor-pointer text-xs"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 mr-2 text-slate-500" />
+                              <span>Visualizar HTML no navegador</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
 
                         <Button
                           variant="ghost"
