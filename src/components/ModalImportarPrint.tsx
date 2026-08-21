@@ -39,10 +39,8 @@ export function ModalImportarPrint({ open, onOpenChange, onConfirmar }: ModalImp
   const [imagemPreview, setImagemPreview] = useState<string | null>(null)
   const [textoReconhecido, setTextoReconhecido] = useState<string>('')
 
-  // Campos em revisão
+  // Campos em revisão (extração automática de Data, Horários, Origem e Destino)
   const [dadosEditados, setDadosEditados] = useState<DadosVooExtraidos>({
-    companhia: '',
-    numero_voo: '',
     data_voo: '',
     horario_partida: '',
     horario_chegada: '',
@@ -52,14 +50,14 @@ export function ModalImportarPrint({ open, onOpenChange, onConfirmar }: ModalImp
   })
 
   const [confianca, setConfianca] = useState<Record<keyof DadosVooExtraidos, boolean>>({
-    companhia: false,
-    numero_voo: false,
     data_voo: false,
     horario_partida: false,
     horario_chegada: false,
     origem: false,
     destino: false,
     descricao: false,
+    companhia: false,
+    numero_voo: false,
   })
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -71,8 +69,6 @@ export function ModalImportarPrint({ open, onOpenChange, onConfirmar }: ModalImp
     setImagemPreview(null)
     setTextoReconhecido('')
     setDadosEditados({
-      companhia: '',
-      numero_voo: '',
       data_voo: '',
       horario_partida: '',
       horario_chegada: '',
@@ -300,55 +296,15 @@ export function ModalImportarPrint({ open, onOpenChange, onConfirmar }: ModalImp
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {/* Companhia */}
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                  <span>Companhia Aérea *</span>
-                  {!confianca.companhia ? (
-                    <span className="text-[10px] text-amber-600 flex items-center gap-0.5 font-medium">
-                      <AlertTriangle className="w-3 h-3" /> Não detectado com certeza
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 font-medium">
-                      <CheckCircle2 className="w-3 h-3" /> Identificado
-                    </span>
-                  )}
-                </Label>
-                <Input
-                  placeholder="Ex: LATAM, Gol, Azul, American Airlines"
-                  value={dadosEditados.companhia}
-                  onChange={(e) =>
-                    setDadosEditados({ ...dadosEditados, companhia: e.target.value })
-                  }
-                  className={`text-xs h-8 ${!confianca.companhia && !dadosEditados.companhia ? 'border-amber-400 bg-amber-50/30' : ''}`}
-                />
-              </div>
-
-              {/* Número do Voo */}
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                  <span>Nº do Voo</span>
-                  {!confianca.numero_voo && (
-                    <span className="text-[10px] text-amber-600 flex items-center gap-0.5 font-medium">
-                      <AlertTriangle className="w-3 h-3" /> Opcional / Não lido
-                    </span>
-                  )}
-                </Label>
-                <Input
-                  placeholder="Ex: LA8190, G3 1234, AA950"
-                  value={dadosEditados.numero_voo}
-                  onChange={(e) =>
-                    setDadosEditados({ ...dadosEditados, numero_voo: e.target.value })
-                  }
-                  className={`text-xs h-8 ${!confianca.numero_voo && !dadosEditados.numero_voo ? 'border-amber-400 bg-amber-50/30' : ''}`}
-                />
-              </div>
-
               {/* Data do Voo */}
               <div className="space-y-1">
                 <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                   <span>Data do Voo</span>
-                  {!confianca.data_voo && (
+                  {confianca.data_voo ? (
+                    <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 font-medium">
+                      <CheckCircle2 className="w-3 h-3" /> Identificado
+                    </span>
+                  ) : (
                     <span className="text-[10px] text-amber-600 flex items-center gap-0.5 font-medium">
                       <AlertTriangle className="w-3 h-3" /> Verifique a data
                     </span>
@@ -364,10 +320,10 @@ export function ModalImportarPrint({ open, onOpenChange, onConfirmar }: ModalImp
 
               {/* Descrição Sintética */}
               <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-700">Título / Descrição</Label>
+                <Label className="text-xs font-bold text-slate-700">Título / Trecho</Label>
                 <Input
-                  placeholder="Ex: LATAM • GRU → MCO • 15/06"
-                  value={dadosEditados.descricao}
+                  placeholder="Ex: GRU → MCO • 15/06"
+                  value={dadosEditados.descricao || ''}
                   onChange={(e) =>
                     setDadosEditados({ ...dadosEditados, descricao: e.target.value })
                   }
@@ -379,7 +335,11 @@ export function ModalImportarPrint({ open, onOpenChange, onConfirmar }: ModalImp
               <div className="space-y-1">
                 <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                   <span>Origem (Aeroporto / Cidade) *</span>
-                  {!confianca.origem && (
+                  {confianca.origem ? (
+                    <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 font-medium">
+                      <CheckCircle2 className="w-3 h-3" /> Identificado
+                    </span>
+                  ) : (
                     <span className="text-[10px] text-amber-600 flex items-center gap-0.5 font-medium">
                       <AlertTriangle className="w-3 h-3" /> Preencha a origem
                     </span>
@@ -397,7 +357,11 @@ export function ModalImportarPrint({ open, onOpenChange, onConfirmar }: ModalImp
               <div className="space-y-1">
                 <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                   <span>Destino (Aeroporto / Cidade) *</span>
-                  {!confianca.destino && (
+                  {confianca.destino ? (
+                    <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 font-medium">
+                      <CheckCircle2 className="w-3 h-3" /> Identificado
+                    </span>
+                  ) : (
                     <span className="text-[10px] text-amber-600 flex items-center gap-0.5 font-medium">
                       <AlertTriangle className="w-3 h-3" /> Preencha o destino
                     </span>
@@ -413,29 +377,56 @@ export function ModalImportarPrint({ open, onOpenChange, onConfirmar }: ModalImp
 
               {/* Horário Partida */}
               <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-700">Horário Partida</Label>
+                <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                  <span>Horário de Saída (Partida)</span>
+                  {confianca.horario_partida ? (
+                    <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 font-medium">
+                      <CheckCircle2 className="w-3 h-3" /> Identificado
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-600 flex items-center gap-0.5 font-medium">
+                      <AlertTriangle className="w-3 h-3" /> Ajuste o horário
+                    </span>
+                  )}
+                </Label>
                 <Input
-                  placeholder="Ex: 08:30"
+                  placeholder="Ex: 17:05 (não use a duração)"
                   value={dadosEditados.horario_partida}
                   onChange={(e) =>
                     setDadosEditados({ ...dadosEditados, horario_partida: e.target.value })
                   }
-                  className={`text-xs h-8 ${!confianca.horario_partida && !dadosEditados.horario_partida ? 'border-amber-400 bg-amber-50/30' : ''}`}
+                  className={`text-xs h-8 font-medium ${!confianca.horario_partida && !dadosEditados.horario_partida ? 'border-amber-400 bg-amber-50/30' : ''}`}
                 />
               </div>
 
               {/* Horário Chegada */}
               <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-700">Horário Chegada</Label>
+                <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                  <span>Horário de Chegada</span>
+                  {confianca.horario_chegada ? (
+                    <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 font-medium">
+                      <CheckCircle2 className="w-3 h-3" /> Identificado
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-600 flex items-center gap-0.5 font-medium">
+                      <AlertTriangle className="w-3 h-3" /> Ajuste o horário
+                    </span>
+                  )}
+                </Label>
                 <Input
-                  placeholder="Ex: 14:45 ou 06:15 (+1)"
+                  placeholder="Ex: 21:35 ou 06:15 (+1)"
                   value={dadosEditados.horario_chegada}
                   onChange={(e) =>
                     setDadosEditados({ ...dadosEditados, horario_chegada: e.target.value })
                   }
-                  className={`text-xs h-8 ${!confianca.horario_chegada && !dadosEditados.horario_chegada ? 'border-amber-400 bg-amber-50/30' : ''}`}
+                  className={`text-xs h-8 font-medium ${!confianca.horario_chegada && !dadosEditados.horario_chegada ? 'border-amber-400 bg-amber-50/30' : ''}`}
                 />
               </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 bg-slate-100 p-2.5 rounded-lg">
+              ℹ️ <strong>Companhia aérea</strong> e <strong>número do voo</strong> devem ser
+              preenchidos manualmente no formulário para garantir precisão e evitar erros.
             </div>
 
             {imagemPreview && (

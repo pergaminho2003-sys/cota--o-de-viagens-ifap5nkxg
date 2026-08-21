@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import {
   Cotacao,
+  OpcaoVoo,
   ConfiguracoesAgencia,
   StatusCotacao,
   STATUS_COTACAO_CONFIG,
 } from '@/types/cotacao'
-import { cotacoesService, configAgenciaService } from '@/services/cotacoesService'
+import { cotacoesService, configAgenciaService, opcoesVooService } from '@/services/cotacoesService'
 import { FormCotacao } from '@/components/FormCotacao'
 import { VisualizacaoCotacao } from '@/components/VisualizacaoCotacao'
 import { DialogConfigAgencia } from '@/components/DialogConfigAgencia'
@@ -209,18 +210,90 @@ export default function Index() {
 
   const handleDuplicarCotacao = async (cotacao: Cotacao) => {
     try {
+      // Obter opções de voo completas caso ainda não estejam populadas
+      let opcoesParaCopiar = cotacao.opcoes_voo
+      if ((!opcoesParaCopiar || opcoesParaCopiar.length === 0) && cotacao.id) {
+        opcoesParaCopiar = await opcoesVooService.listarPorCotacao(cotacao.id)
+      }
+
+      const opcoesSemId = (opcoesParaCopiar || []).map((op, idx) => ({
+        descricao: op.descricao || '',
+        observacao: op.observacao || '',
+        companhia: op.companhia || '',
+        numero_voo: op.numero_voo || '',
+        data_voo: op.data_voo || '',
+        horario_partida: op.horario_partida || '',
+        horario_chegada: op.horario_chegada || '',
+        origem: op.origem || '',
+        destino: op.destino || '',
+        status: op.status || '',
+        custo: Number(op.custo) || 0,
+        margem_desejada: Number(op.margem_desejada) || 0,
+        imposto_percentual:
+          op.imposto_percentual !== undefined && op.imposto_percentual !== null
+            ? Number(op.imposto_percentual)
+            : 6,
+        preco_mercado:
+          op.preco_mercado !== undefined && op.preco_mercado !== null
+            ? Number(op.preco_mercado)
+            : undefined,
+        modo_precificacao: op.modo_precificacao || 'margem',
+        desconto_mercado_percentual:
+          op.desconto_mercado_percentual !== undefined && op.desconto_mercado_percentual !== null
+            ? Number(op.desconto_mercado_percentual)
+            : undefined,
+        ordem: op.ordem !== undefined ? op.ordem : idx,
+      }))
+
       const proximoCodigo = await cotacoesService.gerarProximoCodigo()
-      const copia: Omit<Cotacao, 'id' | 'created' | 'updated'> = {
-        ...cotacao,
+      const copia: Omit<Cotacao, 'id' | 'created' | 'updated'> & { opcoes_voo?: OpcaoVoo[] } = {
         codigo: proximoCodigo,
         cliente_nome: `${cotacao.cliente_nome} (Cópia)`,
+        cliente_email: cotacao.cliente_email || '',
+        cliente_telefone: cotacao.cliente_telefone || '',
+        cliente_cpf_passaporte: cotacao.cliente_cpf_passaporte || '',
+        destino: cotacao.destino || '',
+        data_ida: cotacao.data_ida || '',
+        data_volta: cotacao.data_volta || '',
+        num_passageiros: cotacao.num_passageiros || 1,
+        num_criancas: cotacao.num_criancas || 0,
         status: 'rascunho',
+        servicos: cotacao.servicos ? JSON.parse(JSON.stringify(cotacao.servicos)) : [],
+        opcoes_voo: opcoesSemId as OpcaoVoo[],
+        modo_precificacao: cotacao.modo_precificacao || 'margem',
+        margem_lucro: Number(cotacao.margem_lucro) || 0,
+        desconto_mercado_percentual:
+          cotacao.desconto_mercado_percentual !== undefined &&
+          cotacao.desconto_mercado_percentual !== null
+            ? Number(cotacao.desconto_mercado_percentual)
+            : 0,
+        desconto: Number(cotacao.desconto) || 0,
+        taxas_adicionais: Number(cotacao.taxas_adicionais) || 0,
+        moeda: cotacao.moeda || 'BRL',
+        cotacao_moeda: Number(cotacao.cotacao_moeda) || 1,
+        valor_custo_total: Number(cotacao.valor_custo_total) || 0,
+        valor_lucro: Number(cotacao.valor_lucro) || 0,
+        valor_venda_total: Number(cotacao.valor_venda_total) || 0,
+        preco_mercado:
+          cotacao.preco_mercado !== undefined && cotacao.preco_mercado !== null
+            ? Number(cotacao.preco_mercado)
+            : 0,
+        margem_minima_aceitavel:
+          cotacao.margem_minima_aceitavel !== undefined && cotacao.margem_minima_aceitavel !== null
+            ? Number(cotacao.margem_minima_aceitavel)
+            : 0,
+        observacoes: cotacao.observacoes || '',
+        condicoes_gerais: cotacao.condicoes_gerais || '',
+        formas_pagamento: cotacao.formas_pagamento || '',
+        validade_dias: cotacao.validade_dias || 7,
+        data_validade: cotacao.data_validade || '',
       }
+
       const criada = await cotacoesService.criar(copia)
       setCotacoes([criada, ...cotacoes])
       toast.success(`Cotação duplicada com sucesso como #${criada.codigo}`)
     } catch (err) {
-      console.error(err)
+      console.error('Erro ao duplicar cotação:', err)
       toast.error('Erro ao duplicar cotação')
     }
   }

@@ -254,19 +254,24 @@ export function FormCotacao({
     setOpcoesVoo((prev) => {
       const novas = [...prev]
       const atual = novas[opcaoVooOcrIndex]
+      const cia = dados.companhia || atual.companhia
+      const origemTexto = dados.origem || atual.origem
+      const destinoTexto = dados.destino || atual.destino
+      const novaDescricao =
+        dados.descricao ||
+        (cia ? `${cia} • ${origemTexto} → ${destinoTexto}` : `${origemTexto} → ${destinoTexto}`) ||
+        atual.descricao
+
       novas[opcaoVooOcrIndex] = {
         ...atual,
-        companhia: dados.companhia || atual.companhia,
+        companhia: cia,
         numero_voo: dados.numero_voo || atual.numero_voo,
         data_voo: dados.data_voo || atual.data_voo,
         horario_partida: dados.horario_partida || atual.horario_partida,
         horario_chegada: dados.horario_chegada || atual.horario_chegada,
-        origem: dados.origem || atual.origem,
-        destino: dados.destino || atual.destino,
-        descricao:
-          dados.descricao ||
-          atual.descricao ||
-          `${dados.companhia || 'Voo'} • ${dados.origem || ''} → ${dados.destino || ''}`,
+        origem: origemTexto,
+        destino: destinoTexto,
+        descricao: novaDescricao,
       }
       return novas
     })

@@ -308,9 +308,24 @@ export const cotacoesService = {
     dados: Omit<Cotacao, 'id' | 'created' | 'updated'> & { opcoes_voo?: OpcaoVoo[] },
   ): Promise<Cotacao> {
     const { opcoes_voo, ...dadosCotacao } = dados
-    const payload = {
+    const payload: Record<string, unknown> = {
       ...dadosCotacao,
       servicos: dadosCotacao.servicos || [],
+      modo_precificacao: dadosCotacao.modo_precificacao || 'margem',
+      desconto_mercado_percentual:
+        dadosCotacao.desconto_mercado_percentual !== undefined &&
+        dadosCotacao.desconto_mercado_percentual !== null
+          ? Number(dadosCotacao.desconto_mercado_percentual)
+          : 0,
+      preco_mercado:
+        dadosCotacao.preco_mercado !== undefined && dadosCotacao.preco_mercado !== null
+          ? Number(dadosCotacao.preco_mercado)
+          : 0,
+      margem_minima_aceitavel:
+        dadosCotacao.margem_minima_aceitavel !== undefined &&
+        dadosCotacao.margem_minima_aceitavel !== null
+          ? Number(dadosCotacao.margem_minima_aceitavel)
+          : 0,
     }
     const record = await pb.collection('cotacoes').create(payload)
     const cotacaoCriada = mapRecordToCotacao(record as unknown as Record<string, unknown>)
@@ -327,7 +342,10 @@ export const cotacoesService = {
 
   async atualizar(id: string, dados: Partial<Cotacao>): Promise<Cotacao> {
     const { opcoes_voo, ...dadosCotacao } = dados
-    const payload = { ...dadosCotacao }
+    const payload: Record<string, unknown> = { ...dadosCotacao }
+    if (dadosCotacao.modo_precificacao !== undefined) {
+      payload.modo_precificacao = dadosCotacao.modo_precificacao || 'margem'
+    }
     const record = await pb.collection('cotacoes').update(id, payload)
     const cotacaoAtualizada = mapRecordToCotacao(record as unknown as Record<string, unknown>)
 
@@ -354,17 +372,35 @@ export const cotacoesService = {
   },
 
   async gerarProximoCodigo(): Promise<string> {
+    const anoAtual = new Date().getFullYear()
     try {
-      const records = await pb.collection('cotacoes').getList(1, 1, {
+      const records = await pb.collection('cotacoes').getFullList({
         sort: '-created',
       })
-      const anoAtual = new Date().getFullYear()
-      const total = records.totalItems || 0
-      const proximo = String(total + 1).padStart(3, '0')
+      let maxNum = 0
+      const prefix = `COT-${anoAtual}-`
+      for (const r of records) {
+        const cod = String((r as Record<string, unknown>).codigo || '')
+        if (cod.startsWith(prefix)) {
+          const numPart = parseInt(cod.substring(prefix.length), 10)
+          if (!isNaN(numPart) && numPart > maxNum) {
+            maxNum = numPart
+          }
+        } else if (cod.startsWith('COT-')) {
+          const parts = cod.split('-')
+          if (parts.length >= 3) {
+            const numPart = parseInt(parts[2], 10)
+            if (!isNaN(numPart) && numPart > maxNum) {
+              maxNum = numPart
+            }
+          }
+        }
+      }
+      const proximo = String(Math.max(records.length, maxNum) + 1).padStart(3, '0')
       return `COT-${anoAtual}-${proximo}`
     } catch {
       const random = Math.floor(100 + Math.random() * 900)
-      return `COT-${new Date().getFullYear()}-${random}`
+      return `COT-${anoAtual}-${random}`
     }
   },
 }
