@@ -69,6 +69,7 @@ import {
   Download,
   ExternalLink,
   ChevronDown,
+  Share2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -794,6 +795,23 @@ export default function Index() {
                           <Copy className="w-3.5 h-3.5" />
                         </Button>
 
+                        {/* Botão Compartilhar Link Público */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const baseUrl = window.location.origin
+                            const urlPublica = `${baseUrl}/c/${cotacao.codigo}`
+                            navigator.clipboard.writeText(urlPublica)
+                            toast.success('Link copiado!')
+                          }}
+                          title="Copiar link público de compartilhamento"
+                          className="h-8 px-2.5 text-xs text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 font-semibold"
+                        >
+                          <Share2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                          Compartilhar
+                        </Button>
+
                         {/* Menu de Exportação Rápida (PDF ou HTML) */}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -808,10 +826,23 @@ export default function Index() {
                               <ChevronDown className="w-3 h-3 ml-0.5 text-slate-400" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuContent align="end" className="w-56">
                             <DropdownMenuLabel className="text-xs">
-                              Exportar Proposta
+                              Opções de Compartilhamento & Exportação
                             </DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const baseUrl = window.location.origin
+                                const urlPublica = `${baseUrl}/c/${cotacao.codigo}`
+                                navigator.clipboard.writeText(urlPublica)
+                                toast.success('Link copiado!')
+                              }}
+                              className="cursor-pointer text-xs text-emerald-800 font-semibold"
+                            >
+                              <Share2 className="w-3.5 h-3.5 mr-2 text-emerald-600" />
+                              <span>Copiar Link Público</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => imprimirOuSalvarPDF(cotacao, configAgencia)}
                               className="cursor-pointer text-xs"
@@ -819,7 +850,6 @@ export default function Index() {
                               <Printer className="w-3.5 h-3.5 mr-2 text-sky-700" />
                               <span>Imprimir / PDF</span>
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => {
                                 baixarArquivoHTMLProposta(cotacao, configAgencia)
@@ -831,7 +861,7 @@ export default function Index() {
                               <div>
                                 <div className="font-semibold">Gerar Versão HTML</div>
                                 <div className="text-[10px] text-slate-500">
-                                  Para envio no WhatsApp
+                                  Arquivo estático autocontido
                                 </div>
                               </div>
                             </DropdownMenuItem>

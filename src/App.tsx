@@ -5,6 +5,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import Index from './pages/Index'
 import NotFound from './pages/NotFound'
+import CotacaoPublica from './pages/CotacaoPublica'
 import Layout from './components/Layout'
 
 // ONLY IMPORT AND RENDER WORKING PAGES, NEVER ADD PLACEHOLDER COMPONENTS OR PAGES IN THIS FILE
@@ -20,6 +21,8 @@ const App = () => (
           <Route path="/" element={<Index />} />
           {/* ADD ALL CUSTOM ROUTES MUST BE ADDED HERE */}
         </Route>
+        {/* Rota pública de compartilhamento de cotação */}
+        <Route path="/c/:codigo" element={<CotacaoPublica />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </TooltipProvider>

@@ -48,6 +48,8 @@ import {
   Share2,
   ChevronDown,
   ExternalLink,
+  Globe,
+  Check,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -56,6 +58,7 @@ interface VisualizacaoCotacaoProps {
   configAgencia: ConfiguracoesAgencia
   onVoltar: () => void
   onEditar?: (cotacao: Cotacao) => void
+  onAtualizarPublica?: (novaCotacao: Cotacao) => void
 }
 
 export function VisualizacaoCotacao({
@@ -63,6 +66,7 @@ export function VisualizacaoCotacao({
   configAgencia,
   onVoltar,
   onEditar,
+  onAtualizarPublica,
 }: VisualizacaoCotacaoProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const duracao = calcularDuracaoDias(cotacao.data_ida, cotacao.data_volta)
@@ -102,6 +106,13 @@ export function VisualizacaoCotacao({
 
   const handleGerarPDF = () => {
     imprimirOuSalvarPDF(cotacao, configAgencia)
+  }
+
+  const handleCopiarLinkPublico = () => {
+    const baseUrl = window.location.origin
+    const url = `${baseUrl}/c/${cotacao.codigo}`
+    navigator.clipboard.writeText(url)
+    toast.success('Link copiado!')
   }
 
   const handleBaixarHTML = () => {
@@ -188,31 +199,43 @@ Qualquer dúvida estamos à disposição!`
               variant="outline"
               size="sm"
               onClick={() => onEditar(cotacao)}
-              className="text-slate-700 border-slate-300 hover:bg-slate-50"
+              className="text-slate-700 border-slate-300 hover:bg-slate-50 text-xs"
             >
-              <Edit className="w-4 h-4 mr-1.5 text-slate-500" />
+              <Edit className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
               Editar Cotação
             </Button>
           )}
+
+          {/* Botão Principal: Compartilhar Link Público */}
+          <Button
+            size="sm"
+            onClick={handleCopiarLinkPublico}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm border border-emerald-500 text-xs flex items-center gap-1.5"
+            title="Copia o link permanente da cotação para enviar ao cliente"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            Compartilhar
+          </Button>
 
           <Button
             variant="outline"
             size="sm"
             onClick={handleCopiarResumoWhatsApp}
-            className="border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-semibold"
+            className="border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-semibold text-xs"
           >
-            <MessageCircle className="w-4 h-4 mr-1.5 text-emerald-600" />
-            Copiar p/ WhatsApp
+            <MessageCircle className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+            Copiar Texto WhatsApp
           </Button>
 
-          {/* Botão Gerar Versão HTML (Destaque ao lado do PDF) */}
+          {/* Botão Gerar Versão HTML estática mantida */}
           <Button
+            variant="outline"
             size="sm"
             onClick={handleBaixarHTML}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm border border-emerald-500"
+            className="border-slate-300 text-slate-700 hover:bg-slate-50 text-xs"
             title="Gera um arquivo HTML autocontido com botões interativos para enviar via WhatsApp"
           >
-            <FileCode className="w-4 h-4 mr-1.5" />
+            <FileCode className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
             Gerar versão HTML
           </Button>
 
@@ -230,16 +253,23 @@ Qualquer dúvida estamos à disposição!`
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="text-xs">Opções de Exportação</DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={handleCopiarLinkPublico}
+                className="cursor-pointer text-emerald-800 font-semibold"
+              >
+                <Share2 className="w-4 h-4 mr-2 text-emerald-600" />
+                <span>Copiar Link Público</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleGerarPDF} className="cursor-pointer">
                 <Printer className="w-4 h-4 mr-2 text-sky-700" />
                 <span>Imprimir / Salvar PDF</span>
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleBaixarHTML} className="cursor-pointer">
                 <Download className="w-4 h-4 mr-2 text-emerald-600" />
                 <div>
                   <div className="font-semibold text-xs">Baixar Arquivo HTML</div>
-                  <div className="text-[10px] text-slate-500">Ideal para WhatsApp / Celular</div>
+                  <div className="text-[10px] text-slate-500">Arquivo estático autocontido</div>
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleAbrirPreviaHTML} className="cursor-pointer">
@@ -283,7 +313,14 @@ Qualquer dúvida estamos à disposição!`
             <div className="inline-block bg-sky-900 text-white px-3.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider">
               Proposta Comercial de Viagem
             </div>
-            <div className="text-lg font-black text-slate-900">{cotacao.codigo}</div>
+            <div className="text-lg font-black text-slate-900 flex items-center justify-start sm:justify-end gap-2">
+              <span>{cotacao.codigo}</span>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cotacao.publica !== false ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-rose-50 text-rose-700 border-rose-200'}`}
+              >
+                {cotacao.publica !== false ? 'Link Ativo' : 'Link Inativo'}
+              </span>
+            </div>
             <div className="text-xs text-slate-500">
               Emitida em: {formatarData(cotacao.created || new Date().toISOString())}
             </div>

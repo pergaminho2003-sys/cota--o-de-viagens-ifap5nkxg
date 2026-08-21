@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-21T01:05:50.525Z",
+  "generatedAt": "2026-08-21T01:20:13.110Z",
   "collections": [
     {
       "name": "users",
@@ -243,6 +243,12 @@
         {
           "name": "desconto_mercado_percentual",
           "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "publica",
+          "type": "bool",
           "required": false,
           "system": false
         }

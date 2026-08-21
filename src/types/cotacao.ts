@@ -67,6 +67,7 @@ export interface Cotacao {
   num_passageiros: number
   num_criancas: number
   status: StatusCotacao
+  publica?: boolean // Define se o link público /c/:codigo está ativo
   servicos: ServicoItem[]
   opcoes_voo?: OpcaoVoo[]
   modo_precificacao?: ModoPrecificacao // 'margem' (Modo A) ou 'desconto_mercado' (Modo B)

@@ -74,6 +74,8 @@ function mapRecordToCotacao(record: Record<string, unknown>): Cotacao {
     num_passageiros: Number(record.num_passageiros) || 1,
     num_criancas: Number(record.num_criancas) || 0,
     status: (record.status as Cotacao['status']) || 'rascunho',
+    publica:
+      record.publica !== undefined && record.publica !== null ? Boolean(record.publica) : true,
     servicos: parseServicos(record.servicos),
     modo_precificacao: (record.modo_precificacao as Cotacao['modo_precificacao']) || 'margem',
     margem_lucro: Number(record.margem_lucro) || 0,
@@ -299,7 +301,29 @@ export const cotacoesService = {
       }
       return cotacao
     } catch (err) {
-      console.error('Erro ao buscar cotação:', err)
+      console.error('Erro ao buscar cotação por ID:', err)
+      return null
+    }
+  },
+
+  async buscarPorCodigo(codigo: string): Promise<Cotacao | null> {
+    try {
+      const sanitizedCodigo = codigo.trim()
+      const record = await pb
+        .collection('cotacoes')
+        .getFirstListItem(`codigo = "${sanitizedCodigo}"`)
+      const cotacao = mapRecordToCotacao(record as unknown as Record<string, unknown>)
+      if (cotacao.id) {
+        const opcoes = await opcoesVooService.listarPorCotacao(cotacao.id)
+        if (opcoes.length > 0) {
+          cotacao.opcoes_voo = opcoes
+        } else {
+          cotacao.opcoes_voo = [gerarOpcaoPadraoLegada(cotacao)]
+        }
+      }
+      return cotacao
+    } catch (err) {
+      console.warn(`Cotação não encontrada com código: ${codigo}`, err)
       return null
     }
   },
@@ -310,6 +334,7 @@ export const cotacoesService = {
     const { opcoes_voo, ...dadosCotacao } = dados
     const payload: Record<string, unknown> = {
       ...dadosCotacao,
+      publica: dadosCotacao.publica !== undefined ? dadosCotacao.publica : true,
       servicos: dadosCotacao.servicos || [],
       modo_precificacao: dadosCotacao.modo_precificacao || 'margem',
       desconto_mercado_percentual:

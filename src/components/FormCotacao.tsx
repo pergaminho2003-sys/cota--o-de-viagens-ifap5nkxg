@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import {
   Plane,
   Hotel,
@@ -58,6 +59,8 @@ import {
   Clock,
   ArrowRight,
   FileCode,
+  Share2,
+  Globe,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -96,6 +99,9 @@ export function FormCotacao({
   const [numPassageiros, setNumPassageiros] = useState<number>(cotacaoInicial?.num_passageiros ?? 2)
   const [numCriancas, setNumCriancas] = useState<number>(cotacaoInicial?.num_criancas ?? 0)
   const [status, setStatus] = useState<StatusCotacao>(cotacaoInicial?.status || 'rascunho')
+  const [publica, setPublica] = useState<boolean>(
+    cotacaoInicial?.publica !== undefined ? Boolean(cotacaoInicial.publica) : true,
+  )
 
   const [moeda, setMoeda] = useState<Moeda>(cotacaoInicial?.moeda || 'BRL')
   const [cotacaoMoeda, setCotacaoMoeda] = useState<number>(cotacaoInicial?.cotacao_moeda ?? 1)
@@ -373,6 +379,7 @@ export function FormCotacao({
       num_passageiros: numPassageiros,
       num_criancas: numCriancas,
       status,
+      publica,
       servicos,
       opcoes_voo: opcoesVoo,
       modo_precificacao: opcaoPrincipal.modo_precificacao || 'margem',
@@ -477,6 +484,27 @@ export function FormCotacao({
             type="button"
             variant="outline"
             onClick={() => {
+              const baseUrl = window.location.origin
+              const cod = codigo || cotacaoInicial?.codigo
+              if (!cod) {
+                toast.error('Salve a cotação primeiro para gerar o link de compartilhamento.')
+                return
+              }
+              const url = `${baseUrl}/c/${cod}`
+              navigator.clipboard.writeText(url)
+              toast.success('Link copiado!')
+            }}
+            className="flex-1 sm:flex-none border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-semibold text-xs"
+            title="Copiar link público permanente"
+          >
+            <Share2 className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+            Compartilhar
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
               if (!clienteNome.trim() || !destino.trim()) {
                 toast.error('Preencha ao menos o nome do cliente e destino para gerar o HTML.')
                 return
@@ -485,10 +513,10 @@ export function FormCotacao({
               baixarArquivoHTMLProposta(cot, configAgencia)
               toast.success('Arquivo HTML gerado para envio no WhatsApp!')
             }}
-            className="flex-1 sm:flex-none border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-semibold text-xs"
-            title="Gera a proposta em formato HTML para WhatsApp"
+            className="flex-1 sm:flex-none border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-xs"
+            title="Gera arquivo HTML estático autocontido"
           >
-            <FileCode className="w-4 h-4 mr-1.5 text-emerald-600" />
+            <FileCode className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
             Exportar HTML
           </Button>
 
@@ -544,6 +572,36 @@ export function FormCotacao({
                       <SelectItem value="finalizada">Finalizada</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              {/* Toggle de Acesso ao Link Público */}
+              <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between bg-slate-50/80 px-3 py-2 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Globe className={`w-4 h-4 ${publica ? 'text-emerald-600' : 'text-slate-400'}`} />
+                  <div>
+                    <Label
+                      htmlFor="toggle-publica"
+                      className="text-xs font-bold text-slate-800 cursor-pointer"
+                    >
+                      Link público ativo
+                    </Label>
+                    <p className="text-[11px] text-slate-500">
+                      {publica
+                        ? 'A proposta pode ser acessada pelo link /c/' +
+                          (codigo || cotacaoInicial?.codigo || '...')
+                        : 'Link desativado — o cliente verá página de cotação indisponível'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Switch id="toggle-publica" checked={publica} onCheckedChange={setPublica} />
+                  <span
+                    className={`text-xs font-bold ${publica ? 'text-emerald-700' : 'text-slate-500'}`}
+                  >
+                    {publica ? 'Ativo' : 'Desativado'}
+                  </span>
                 </div>
               </div>
             </CardHeader>
