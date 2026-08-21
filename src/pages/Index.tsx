@@ -176,7 +176,10 @@ export default function Index() {
       status: 'rascunho',
       servicos: [],
       modo_precificacao: 'margem',
-      margem_lucro: configAgencia.margem_padrao || 15,
+      margem_lucro:
+        configAgencia.margem_padrao !== undefined && configAgencia.margem_padrao !== null
+          ? configAgencia.margem_padrao
+          : 15,
       desconto_mercado_percentual: 10,
       desconto: 0,
       taxas_adicionais: 0,

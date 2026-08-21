@@ -2,6 +2,10 @@ import pb from '@/lib/pocketbase/client'
 import { Cotacao, ConfiguracoesAgencia, ServicoItem, OpcaoVoo } from '@/types/cotacao'
 
 export function mapRecordToOpcaoVoo(record: Record<string, unknown>): OpcaoVoo {
+  const margemRaw = record.margem_desejada
+  const margemDesejada =
+    margemRaw !== undefined && margemRaw !== null && margemRaw !== '' ? Number(margemRaw) : 15
+
   return {
     id: record.id as string,
     cotacao_id: (record.cotacao_id as string) || '',
@@ -15,8 +19,13 @@ export function mapRecordToOpcaoVoo(record: Record<string, unknown>): OpcaoVoo {
     destino: (record.destino as string) || '',
     status: (record.status as OpcaoVoo['status']) || 'Recomendada',
     custo: Number(record.custo) || 0,
-    margem_desejada: Number(record.margem_desejada) || 15,
-    imposto_percentual: Number(record.imposto_percentual) || 6,
+    margem_desejada: isNaN(margemDesejada) ? 15 : margemDesejada,
+    imposto_percentual:
+      record.imposto_percentual !== undefined &&
+      record.imposto_percentual !== null &&
+      record.imposto_percentual !== ''
+        ? Number(record.imposto_percentual)
+        : 6,
     preco_mercado:
       record.preco_mercado !== undefined &&
       record.preco_mercado !== null &&
@@ -134,6 +143,19 @@ export const opcoesVooService = {
       const criadas: OpcaoVoo[] = []
       for (let i = 0; i < opcoes.length; i++) {
         const op = opcoes[i]
+        const margemOp =
+          op.margem_desejada !== undefined &&
+          op.margem_desejada !== null &&
+          (op.margem_desejada as any) !== ''
+            ? Number(op.margem_desejada)
+            : 15
+        const impostoOp =
+          op.imposto_percentual !== undefined &&
+          op.imposto_percentual !== null &&
+          (op.imposto_percentual as any) !== ''
+            ? Number(op.imposto_percentual)
+            : 6
+
         const rec = await pb.collection('opcoes_voo').create({
           cotacao_id: cotacaoId,
           descricao:
@@ -147,12 +169,19 @@ export const opcoesVooService = {
           destino: op.destino || '',
           status: op.status || (i === 0 ? 'Recomendada' : 'Alternativa'),
           custo: Number(op.custo) || 0,
-          margem_desejada: Number(op.margem_desejada) || 15,
-          imposto_percentual: Number(op.imposto_percentual) || 6,
-          preco_mercado: op.preco_mercado !== undefined ? Number(op.preco_mercado) : null,
+          margem_desejada: isNaN(margemOp) ? 15 : margemOp,
+          imposto_percentual: isNaN(impostoOp) ? 6 : impostoOp,
+          preco_mercado:
+            op.preco_mercado !== undefined &&
+            op.preco_mercado !== null &&
+            (op.preco_mercado as any) !== ''
+              ? Number(op.preco_mercado)
+              : null,
           modo_precificacao: op.modo_precificacao || 'margem',
           desconto_mercado_percentual:
-            op.desconto_mercado_percentual !== undefined
+            op.desconto_mercado_percentual !== undefined &&
+            op.desconto_mercado_percentual !== null &&
+            (op.desconto_mercado_percentual as any) !== ''
               ? Number(op.desconto_mercado_percentual)
               : null,
           ordem: i,
@@ -175,6 +204,11 @@ export function gerarOpcaoPadraoLegada(cotacao: Cotacao): OpcaoVoo {
     ? Number(servicoAereo.valor_custo_total) || 0
     : cotacao.valor_custo_total || 0
 
+  const margem =
+    cotacao.margem_lucro !== undefined && cotacao.margem_lucro !== null
+      ? Number(cotacao.margem_lucro)
+      : 15
+
   return {
     id: `legado-${cotacao.id || Date.now()}`,
     cotacao_id: cotacao.id,
@@ -188,11 +222,15 @@ export function gerarOpcaoPadraoLegada(cotacao: Cotacao): OpcaoVoo {
     destino: cotacao.destino || '',
     status: 'Recomendada',
     custo: custoAereo,
-    margem_desejada: cotacao.margem_lucro || 15,
+    margem_desejada: isNaN(margem) ? 15 : margem,
     imposto_percentual: 6,
     preco_mercado: cotacao.preco_mercado,
     modo_precificacao: cotacao.modo_precificacao || 'margem',
-    desconto_mercado_percentual: cotacao.desconto_mercado_percentual || 10,
+    desconto_mercado_percentual:
+      cotacao.desconto_mercado_percentual !== undefined &&
+      cotacao.desconto_mercado_percentual !== null
+        ? Number(cotacao.desconto_mercado_percentual)
+        : 10,
     ordem: 0,
   }
 }
@@ -375,12 +413,12 @@ export const configAgenciaService = {
     // Fallback padrão
     return {
       nome_agencia: 'Aura Viagens & Turismo',
-      cnpj_cadastur: 'CADASTUR: 26.045.892/0001-30',
-      email_contato: 'atendimento@auraviagens.com.br',
-      telefone_contato: '(11) 3456-7890',
-      whatsapp: '(11) 98765-4321',
-      endereco: 'Av. Paulista, 1000, Cj. 142 - Bela Vista, São Paulo - SP',
-      site_instagram: '@auraviagens | www.auraviagens.com.br',
+      cnpj_cadastur: '',
+      email_contato: '',
+      telefone_contato: '',
+      whatsapp: '',
+      endereco: '',
+      site_instagram: '',
       margem_padrao: 15,
       imposto_lucro_padrao: 6,
       validade_padrao_dias: 7,
@@ -399,14 +437,12 @@ export const configAgenciaService = {
   ): Promise<ConfiguracoesAgencia> {
     const formData = new FormData()
 
+    const telContato = dados.telefone_contato ? String(dados.telefone_contato).trim() : ''
     formData.append('nome_agencia', (dados.nome_agencia || 'Sua Agência de Viagens').trim())
     formData.append('cnpj_cadastur', dados.cnpj_cadastur ? String(dados.cnpj_cadastur).trim() : '')
     formData.append('email_contato', dados.email_contato ? String(dados.email_contato).trim() : '')
-    formData.append(
-      'telefone_contato',
-      dados.telefone_contato ? String(dados.telefone_contato).trim() : '',
-    )
-    formData.append('whatsapp', dados.whatsapp ? String(dados.whatsapp).trim() : '')
+    formData.append('telefone_contato', telContato)
+    formData.append('whatsapp', dados.whatsapp ? String(dados.whatsapp).trim() : telContato)
     formData.append('endereco', dados.endereco ? String(dados.endereco).trim() : '')
     formData.append(
       'site_instagram',

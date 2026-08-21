@@ -265,10 +265,20 @@ export function DialogConfigAgencia({ open, onOpenChange, onSaved }: DialogConfi
                       type="number"
                       min="0"
                       step="0.5"
-                      value={config.margem_padrao ?? 15}
-                      onChange={(e) =>
-                        setConfig({ ...config, margem_padrao: parseFloat(e.target.value) || 0 })
+                      value={
+                        config.margem_padrao !== undefined &&
+                        config.margem_padrao !== null &&
+                        !isNaN(config.margem_padrao)
+                          ? config.margem_padrao
+                          : ''
                       }
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setConfig({
+                          ...config,
+                          margem_padrao: val === '' ? 0 : parseFloat(val) || 0,
+                        })
+                      }}
                     />
                     <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">
                       %

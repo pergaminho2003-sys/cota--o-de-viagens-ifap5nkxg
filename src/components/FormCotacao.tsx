@@ -332,10 +332,25 @@ export function FormCotacao({
         modo_precificacao: 'margem',
         ordem: 0,
       }
+
+    const margemPrincipal =
+      opcaoPrincipal.margem_desejada !== undefined &&
+      opcaoPrincipal.margem_desejada !== null &&
+      !isNaN(Number(opcaoPrincipal.margem_desejada))
+        ? Number(opcaoPrincipal.margem_desejada)
+        : margemPadrao
+
+    const impostoPrincipal =
+      opcaoPrincipal.imposto_percentual !== undefined &&
+      opcaoPrincipal.imposto_percentual !== null &&
+      !isNaN(Number(opcaoPrincipal.imposto_percentual))
+        ? Number(opcaoPrincipal.imposto_percentual)
+        : impostoAliquotaPadrao
+
     const calculoPrincipal = calcularOpcaoVoo({
       custo: opcaoPrincipal.custo || 0,
-      margem_desejada: opcaoPrincipal.margem_desejada || margemPadrao,
-      imposto_percentual: opcaoPrincipal.imposto_percentual || impostoAliquotaPadrao,
+      margem_desejada: margemPrincipal,
+      imposto_percentual: impostoPrincipal,
       preco_mercado: opcaoPrincipal.preco_mercado,
       modo_precificacao: opcaoPrincipal.modo_precificacao || 'margem',
       desconto_mercado_percentual: opcaoPrincipal.desconto_mercado_percentual,
@@ -357,7 +372,7 @@ export function FormCotacao({
       servicos,
       opcoes_voo: opcoesVoo,
       modo_precificacao: opcaoPrincipal.modo_precificacao || 'margem',
-      margem_lucro: opcaoPrincipal.margem_desejada || margemPadrao,
+      margem_lucro: margemPrincipal,
       desconto_mercado_percentual: opcaoPrincipal.desconto_mercado_percentual,
       desconto,
       taxas_adicionais: taxasAdicionais,
@@ -971,14 +986,21 @@ export function FormCotacao({
                                 type="number"
                                 min="0"
                                 step="0.5"
-                                value={opcao.margem_desejada}
-                                onChange={(e) =>
+                                value={
+                                  opcao.margem_desejada !== undefined &&
+                                  opcao.margem_desejada !== null &&
+                                  !isNaN(opcao.margem_desejada)
+                                    ? opcao.margem_desejada
+                                    : ''
+                                }
+                                onChange={(e) => {
+                                  const val = e.target.value
                                   handleAtualizarOpcao(
                                     index,
                                     'margem_desejada',
-                                    parseFloat(e.target.value) || 0,
+                                    val === '' ? 0 : parseFloat(val) || 0,
                                   )
-                                }
+                                }}
                                 className="h-8 text-xs bg-slate-950 border-slate-700 text-white font-bold"
                               />
                             </div>

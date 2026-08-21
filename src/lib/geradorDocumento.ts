@@ -15,6 +15,11 @@ export function gerarHTMLDocumentoProposta(
   const totalPassageiros = (cotacao.num_passageiros || 1) + (cotacao.num_criancas || 0)
   const numPassageiros = cotacao.num_passageiros || 1
 
+  const margemFallback =
+    cotacao.margem_lucro !== undefined && cotacao.margem_lucro !== null
+      ? Number(cotacao.margem_lucro)
+      : (agencia.margem_padrao ?? 15)
+
   const opcoesVoo: OpcaoVoo[] =
     cotacao.opcoes_voo && cotacao.opcoes_voo.length > 0
       ? cotacao.opcoes_voo
@@ -26,11 +31,15 @@ export function gerarHTMLDocumentoProposta(
             destino: cotacao.destino || '',
             status: 'Recomendada',
             custo: cotacao.valor_custo_total || 0,
-            margem_desejada: cotacao.margem_lucro || 15,
-            imposto_percentual: 6,
+            margem_desejada: isNaN(margemFallback) ? 15 : margemFallback,
+            imposto_percentual: agencia.imposto_lucro_padrao ?? 6,
             preco_mercado: cotacao.preco_mercado,
             modo_precificacao: cotacao.modo_precificacao || 'margem',
-            desconto_mercado_percentual: cotacao.desconto_mercado_percentual || 10,
+            desconto_mercado_percentual:
+              cotacao.desconto_mercado_percentual !== undefined &&
+              cotacao.desconto_mercado_percentual !== null
+                ? Number(cotacao.desconto_mercado_percentual)
+                : 10,
             ordem: 0,
           },
         ]
@@ -353,7 +362,7 @@ export function gerarHTMLDocumentoProposta(
       <div class="box-card">
         <div class="box-title">🏢 Especialista em Viagens</div>
         <div class="box-content">
-          <p><strong>${agencia.nome_agencia}</strong></p>
+          <p><strong>${agencia.nome_agencia || 'Agência de Viagens'}</strong></p>
           ${agencia.telefone_contato || agencia.whatsapp ? `<p><strong>Contato:</strong> ${agencia.telefone_contato || agencia.whatsapp}</p>` : ''}
           ${agencia.site_instagram ? `<p><strong>Redes:</strong> ${agencia.site_instagram}</p>` : ''}
         </div>

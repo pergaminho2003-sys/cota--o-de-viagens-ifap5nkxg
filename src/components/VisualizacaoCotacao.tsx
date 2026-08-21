@@ -47,6 +47,11 @@ export function VisualizacaoCotacao({
   const totalPassageiros = (cotacao.num_passageiros || 1) + (cotacao.num_criancas || 0)
   const numPassageiros = cotacao.num_passageiros || 1
 
+  const margemFallback =
+    cotacao.margem_lucro !== undefined && cotacao.margem_lucro !== null
+      ? Number(cotacao.margem_lucro)
+      : (configAgencia.margem_padrao ?? 15)
+
   const opcoesVoo: OpcaoVoo[] =
     cotacao.opcoes_voo && cotacao.opcoes_voo.length > 0
       ? cotacao.opcoes_voo
@@ -58,11 +63,15 @@ export function VisualizacaoCotacao({
             destino: cotacao.destino || '',
             status: 'Recomendada',
             custo: cotacao.valor_custo_total || 0,
-            margem_desejada: cotacao.margem_lucro || 15,
-            imposto_percentual: 6,
+            margem_desejada: isNaN(margemFallback) ? 15 : margemFallback,
+            imposto_percentual: configAgencia.imposto_lucro_padrao ?? 6,
             preco_mercado: cotacao.preco_mercado,
             modo_precificacao: cotacao.modo_precificacao || 'margem',
-            desconto_mercado_percentual: cotacao.desconto_mercado_percentual || 10,
+            desconto_mercado_percentual:
+              cotacao.desconto_mercado_percentual !== undefined &&
+              cotacao.desconto_mercado_percentual !== null
+                ? Number(cotacao.desconto_mercado_percentual)
+                : 10,
             ordem: 0,
           },
         ]
@@ -269,7 +278,7 @@ Qualquer dúvida estamos à disposição!`
             {(configAgencia.telefone_contato || configAgencia.whatsapp) && (
               <div className="text-xs text-slate-600">
                 <strong className="text-slate-700">Contato:</strong>{' '}
-                {configAgencia.whatsapp || configAgencia.telefone_contato}
+                {configAgencia.telefone_contato || configAgencia.whatsapp}
               </div>
             )}
             {configAgencia.site_instagram && (
